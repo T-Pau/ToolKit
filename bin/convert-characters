@@ -30,11 +30,11 @@
 
 import os
 import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, "python-packages")))
 
 import argparse
 import enum
-import mergedeep
 import yaml
 
 import AssemblerOutput
@@ -52,79 +52,105 @@ class Inverted(enum.Enum):
     IF_DIFFERENT = "if-different"
 
 
+class Spec:
+    @staticmethod
+    def decode(yaml, key, default_value=None):
+        if yaml is not None and key in yaml:
+            return yaml[key]
+        else:
+            return default_value
+
+    class Charset:
+        def __init__(self, yaml):
+            self.count = Spec.decode(yaml, "count", 256)
+            self.width = Spec.decode(yaml, "width", 8)
+            self.height = Spec.decode(yaml, "height", 8)
+            self.name = Spec.decode(yaml, "name")
+
+    class Image:
+        def __init__(self, yaml, spec):
+            self.file = Spec.decode(yaml, "file")
+            self.inverted = Inverted(Spec.decode(yaml, "inverted", "none"))
+            self.include_count = Spec.decode(yaml, "include-count", True)
+            self.name = Spec.decode(yaml, "name")
+            self.screen_width = Spec.decode(yaml, "screen-width", spec.screen_width)
+            self.slice_x = Spec.decode(yaml, "slice-x", 1)
+            self.slice_y = Spec.decode(yaml, "slice-y", 1)
+            self.enable_skip_blank = Spec.decode(yaml, "skip-blank", False)
+            self.type = Spec.decode(yaml, "type")
+
+            self.keep_blanks = {}
+            for value in Spec.decode(yaml, "keep-blanks", []):
+                self.keep_blanks[value] = True
+
+        def skip_blank(self, index):
+            return self.enable_skip_blank and index not in self.keep_blanks
+
+    def __init__(self, yaml):
+        self.assembler = Spec.decode(yaml, "assembler", "cc65")
+        self.screen_width = Spec.decode(yaml, "screen_width")
+        self.charset = Spec.Charset(Spec.decode(yaml, "charset"))
+        if "images" in yaml:
+            self.images = map(lambda spec: Spec.Image(spec, self), yaml["images"])
+        else:
+            self.images = []
+
+
 output = AtomicOutput.AtomicOutput()
 
 
 def process_charset(image, image_specs):
-    inverted = Inverted.NONE
-    try:
-        inverted = Inverted(image_specs["inverted"])
-    except KeyError:
-        output.abort("invalid inverted '" + image_specs["inverted"] + "'")
-
     count = image.count
-    if inverted == Inverted.PRESENT:
+    if image_specs.inverted == Inverted.PRESENT:
         count //= 2
-
-    keep_blanks = {}
-    for index in image_specs["keep-blanks"]:
-        keep_blanks[index] = True
 
     for index in range(count):
         value = image.get(index)
-        if not (all(x == 0 for x in value) and image_specs["skip-blank"] and index not in keep_blanks):
+        if not (all(x == 0 for x in value) and image_specs.skip_blank(index)):
             charset.add_with_index(image.get(index), index)
-            if inverted == Inverted.CREATE:
+            if image_specs.inverted == Inverted.CREATE:
                 charset.add_with_index(map(lambda b: b ^ 255, value), index + charset.size // 2)
-        if inverted == Inverted.PRESENT:
+        if image_specs.inverted == Inverted.PRESENT:
             value = image.get(index + count)
-            if not (all(x == 255 for x in value) and image_specs["skip-blank"] and index + count not in keep_blanks):
+            if not (all(x == 255 for x in value) and image_specs.skip_blank(index + count)):
                 charset.add_with_index(value, index + charset.size // 2)
 
 
 def process_image(image, image_specs):
-    inverted = Inverted.NONE
-    try:
-        inverted = Inverted(image_specs["inverted"])
-    except KeyError:
-        output.abort("invalid inverted '" + image_specs["inverted"] + "'")
-
-    slice_x = image_specs["slice-x"]
-    slice_y = image_specs["slice-y"]
     image_width = image.width
     image_height = image.height
     inverted_x_offset = 0
     inverted_y_offset = 0
-    if inverted == Inverted.PRESENT or inverted == Inverted.IF_DIFFERENT:
-        if slice_y > 1:
+    if image_specs.inverted == Inverted.PRESENT or image_specs.inverted == Inverted.IF_DIFFERENT:
+        if image_specs.slice_y > 1:
             image_width //= 2
             inverted_x_offset = image_width
         else:
             image_height //= 2
             inverted_y_offset = image_height
 
-    if image_width % slice_x != 0:
-        output.abort(f"image width {image_width} not multiple of slice-x {slice_x}")
-    if image_height % slice_y != 0:
-        output.abort(f"image height {image_height} not multiple of slice-y {slice_y}")
-    width = image_width // slice_x
-    height = image_height // slice_y
-    count = slice_x * slice_y
+    if image_width % image_specs.slice_x != 0:
+        output.abort(f"image width {image_width} not multiple of slice-x {image_specs.slice_x}")
+    if image_height % image_specs.slice_y != 0:
+        output.abort(f"image height {image_height} not multiple of slice-y {image_specs.slice_y}")
+    width = image_width // image_specs.slice_x
+    height = image_height // image_specs.slice_y
+    count = image_specs.slice_x * image_specs.slice_y
 
     parts = []
 
-    for y in range(slice_y):
-        for x in range(slice_x):
+    for y in range(image_specs.slice_y):
+        for x in range(image_specs.slice_x):
             runlength = RunlengthEncoder.RunlengthEncoder()
             for yy in range(height):
-                if yy > 0 and image_specs["screen_width"] is not None:
-                    runlength.skip(image_specs["screen_width"] - width)
+                if yy > 0 and image_specs.screen_width is not None:
+                    runlength.skip(image_specs.screen_width - width)
                 for xx in range(width):
                     value = image.get_xy(x * width + xx, y * height + yy)
                     value2 = None
-                    if inverted == Inverted.PRESENT or inverted == Inverted.IF_DIFFERENT:
+                    if image_specs.inverted == Inverted.PRESENT or image_specs.inverted == Inverted.IF_DIFFERENT:
                         value2 = image.get_xy(x * width + xx + inverted_x_offset, y * height + yy + inverted_y_offset)
-                        if inverted == Inverted.IF_DIFFERENT and value == value2:
+                        if image_specs.inverted == Inverted.IF_DIFFERENT and value == value2:
                             value2 = None
                     if value2 is None:
                         runlength.add(charset.add(value))
@@ -133,10 +159,10 @@ def process_image(image, image_specs):
             parts.append(runlength.end())
 
     if count == 1:
-        assembler.global_bytes(image_specs["name"], parts[0])
+        assembler.global_bytes(image_specs.name, parts[0])
     else:
         assembler.data_section()
-        assembler.parts(image_specs["name"], parts, image_specs["include-count"])
+        assembler.parts(image_specs.name, parts, image_specs.include_count)
 
 
 processors = {
@@ -156,50 +182,28 @@ output.set_filename(args.output)
 dependencies = Dependencies.Dependencies(args.depfile, args.output)
 dependencies.add(args.specs)
 
-defaults = {
-    "assembler": "cc65",
-    "charset": {
-        "width": 8,
-        "height": 8,
-        "count": 256
-    },
-    "screen_width": None
-}
-
-image_defaults = {
-    "include-count": True,
-    "inverted": "none",
-    "slice-x": 1,
-    "slice-y": 1,
-    "skip-blank": False,
-    "keep-blanks": []
-}
 
 with open(args.specs, "r") as stream:
     try:
-        specs = mergedeep.merge(defaults, yaml.safe_load(stream))
+        specs = Spec(yaml.safe_load(stream))
     except yaml.YAMLError as exc:
         output.abort(f"can't load specs from '{args.specs}: {exc}")
 
-image_defaults["screen_width"] = specs["screen_width"]
-
-assembler = AssemblerOutput.AssemblerOutput(specs["assembler"], output.get_file())
-charset = Charset.Charset(specs["charset"]["count"], bytes((specs["charset"]["width"]*specs["charset"]["height"])//8), True)
+assembler = AssemblerOutput.AssemblerOutput(specs.assembler, output.get_file())
+charset = Charset.Charset(specs.charset.count, bytes((specs.charset.width * specs.charset.height) // 8), True)
 
 assembler.header(args.specs)
 
-for image_spec in specs["images"]:
-    image_spec = mergedeep.merge(image_defaults, image_spec)
-    dependencies.add(image_spec["file"])
-    image = CharacterImage.CharacterImage(image_spec["file"], specs["charset"]["width"], specs["charset"]["height"],
+for image_spec in specs.images:
+    dependencies.add(image_spec.file)
+    image = CharacterImage.CharacterImage(image_spec.file, specs.charset.width, specs.charset.height,
                                           {0x80000000: 0, 0x808080: 0})
-    image_type = image_spec["type"]
-    if image_type in processors:
-        processors[image_type](image, image_spec)
+    if image_spec.type in processors:
+        processors[image_spec.type](image, image_spec)
     else:
-        output.abort(f"unknown type '{image_type}'")
+        output.abort(f"unknown type '{image_spec.type}'")
 
-assembler.global_bytes(specs["charset"]["name"], charset.get_bytes())
+assembler.global_bytes(specs.charset.name, charset.get_bytes())
 
 output.close()
 dependencies.write()
