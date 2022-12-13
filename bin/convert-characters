@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+
+"""
+  convert-characters -- convert multiple images into one character set
+  Copyright (C) Dieter Baron
+
+  The author can be contacted at <dillo@tpau.group>.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  2. The names of the authors may not be used to endorse or promote
+     products derived from this software without specific prior
+     written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE AUTHORS "AS IS" AND ANY EXPRESS
+  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
+
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, "python-packages")))
+
+import argparse
+import enum
+import mergedeep
+import yaml
+
+import AssemblerOutput
+import AtomicOutput
+import CharacterImage
+import Charset
+import Dependencies
+import RunlengthEncoder
+
+
+class Inverted(enum.Enum):
+    NONE = "none"
+    CREATE = "create"
+    PRESENT = "present"
+    IF_DIFFERENT = "if-different"
+
+
+output = AtomicOutput.AtomicOutput()
+
+
+def process_charset(image, image_specs):
+    inverted = Inverted.NONE
+    try:
+        inverted = Inverted(image_specs["inverted"])
+    except KeyError:
+        output.abort("invalid inverted '" + image_specs["inverted"] + "'")
+
+    count = image.count
+    if inverted == Inverted.PRESENT:
+        count //= 2
+
+    keep_blanks = {}
+    for index in image_specs["keep-blanks"]:
+        keep_blanks[index] = True
+
+    for index in range(count):
+        value = image.get(index)
+        if not (all(x == 0 for x in value) and image_specs["skip-blank"] and index not in keep_blanks):
+            charset.add_with_index(image.get(index), index)
+            if inverted == Inverted.CREATE:
+                charset.add_with_index(map(lambda b: b ^ 255, value), index + charset.size // 2)
+        if inverted == Inverted.PRESENT:
+            value = image.get(index + count)
+            if not (all(x == 255 for x in value) and image_specs["skip-blank"] and index + count not in keep_blanks):
+                charset.add_with_index(value, index + charset.size // 2)
+
+
+def process_image(image, image_specs):
+    inverted = Inverted.NONE
+    try:
+        inverted = Inverted(image_specs["inverted"])
+    except KeyError:
+        output.abort("invalid inverted '" + image_specs["inverted"] + "'")
+
+    slice_x = image_specs["slice-x"]
+    slice_y = image_specs["slice-y"]
+    image_width = image.width
+    image_height = image.height
+    inverted_x_offset = 0
+    inverted_y_offset = 0
+    if inverted == Inverted.PRESENT or inverted == Inverted.IF_DIFFERENT:
+        if slice_y > 1:
+            image_width //= 2
+            inverted_x_offset = image_width
+        else:
+            image_height //= 2
+            inverted_y_offset = image_height
+
+    if image_width % slice_x != 0:
+        output.abort(f"image width {image_width} not multiple of slice-x {slice_x}")
+    if image_height % slice_y != 0:
+        output.abort(f"image height {image_height} not multiple of slice-y {slice_y}")
+    width = image_width // slice_x
+    height = image_height // slice_y
+    count = slice_x * slice_y
+
+    parts = []
+
+    for y in range(slice_y):
+        for x in range(slice_x):
+            runlength = RunlengthEncoder.RunlengthEncoder()
+            for yy in range(height):
+                if yy > 0 and image_specs["screen_width"] is not None:
+                    runlength.skip(image_specs["screen_width"] - width)
+                for xx in range(width):
+                    value = image.get_xy(x * width + xx, y * height + yy)
+                    value2 = None
+                    if inverted == Inverted.PRESENT or inverted == Inverted.IF_DIFFERENT:
+                        value2 = image.get_xy(x * width + xx + inverted_x_offset, y * height + yy + inverted_y_offset)
+                        if inverted == Inverted.IF_DIFFERENT and value == value2:
+                            value2 = None
+                    if value2 is None:
+                        runlength.add(charset.add(value))
+                    else:
+                        runlength.add(charset.add_pair(value, value2))
+            parts.append(runlength.end())
+
+    if count == 1:
+        assembler.global_bytes(image_specs["name"], parts[0])
+    else:
+        assembler.data_section()
+        assembler.parts(image_specs["name"], parts, image_specs["include-count"])
+
+
+processors = {
+    "charset": process_charset,
+    "image": process_image
+}
+
+parser = argparse.ArgumentParser(description='Convert images to charset and screens.')
+
+parser.add_argument("specs")
+parser.add_argument("output")
+parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+
+args = parser.parse_args()
+
+output.set_filename(args.output)
+dependencies = Dependencies.Dependencies(args.depfile, args.output)
+dependencies.add(args.specs)
+
+defaults = {
+    "assembler": "cc65",
+    "charset": {
+        "width": 8,
+        "height": 8,
+        "count": 256
+    },
+    "screen_width": None
+}
+
+image_defaults = {
+    "include-count": True,
+    "inverted": "none",
+    "slice-x": 1,
+    "slice-y": 1,
+    "skip-blank": False,
+    "keep-blanks": []
+}
+
+with open(args.specs, "r") as stream:
+    try:
+        specs = mergedeep.merge(defaults, yaml.safe_load(stream))
+    except yaml.YAMLError as exc:
+        output.abort(f"can't load specs from '{args.specs}: {exc}")
+
+image_defaults["screen_width"] = specs["screen_width"]
+
+assembler = AssemblerOutput.AssemblerOutput(specs["assembler"], output.get_file())
+charset = Charset.Charset(specs["charset"]["count"], bytes((specs["charset"]["width"]*specs["charset"]["height"])//8), True)
+
+assembler.header(args.specs)
+
+for image_spec in specs["images"]:
+    image_spec = mergedeep.merge(image_defaults, image_spec)
+    dependencies.add(image_spec["file"])
+    image = CharacterImage.CharacterImage(image_spec["file"], specs["charset"]["width"], specs["charset"]["height"],
+                                          {0x80000000: 0, 0x808080: 0})
+    image_type = image_spec["type"]
+    if image_type in processors:
+        processors[image_type](image, image_spec)
+    else:
+        output.abort(f"unknown type '{image_type}'")
+
+assembler.global_bytes(specs["charset"]["name"], charset.get_bytes())
+
+output.close()
+dependencies.write()
