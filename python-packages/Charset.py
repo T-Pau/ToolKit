@@ -38,7 +38,7 @@ class Charset:
 
     def add(self, value):
         if value in self.by_value:
-            return self.by_value[value]
+            return self.by_value[value][0]
         else:
             index = self.get_next_index()
             self.add_with_index(value, index)
@@ -49,13 +49,14 @@ class Charset:
             offset = self.size // 2
 
         if value1 in self.by_value:
-            index = self.by_value[value1]
-            if value2 in self.by_value:
-                if index + offset == self.by_value[value2]:
+            for index in self.by_value[value1]:
+                if value2 in self.by_value and index + offset in self.by_value[value2]:
                     return index
-            elif not index + offset in self.by_index:
-                self.add_with_index(value2, index + offset)
-                return index
+        if value1 in self.by_value:
+            for index in self.by_value[value1]:
+                if not index + offset in self.by_index:
+                    self.add_with_index(value2, index + offset)
+                    return index
         index = self.get_next_index_pair(offset)
         self.add_with_index(value1, index)
         self.add_with_index(value2, index + offset)
@@ -66,24 +67,23 @@ class Charset:
             raise RuntimeError(f"character {index} already set")
         else:
             self.by_index[index] = value
-            self.by_value[value] = index
+            if value not in self.by_value:
+                self.by_value[value] = []
+            self.by_value[value].append(index)
 
     def get_next_index(self):
         while self.next_index in self.by_index:
             if self.enable_pairs and self.next_index < self.size // 2 and self.next_index + self.size // 2 not in self.by_index:
-                print(self.next_index + self.size // 2)
                 return self.next_index + self.size // 2
             self.next_index += 1
             if self.next_index >= self.size:
                 raise RuntimeError("out of characters")
-        print(self.next_index)
         return self.next_index
 
     def get_next_index_pair(self, offset):
         if self.next_index < self.size - offset:
             for index in range(self.next_index, self.size - offset):
                 if index not in self.by_index and index + offset not in self.by_index:
-                    print((index, index+offset))
                     return index
         raise RuntimeError("out of characters")
 
