@@ -73,8 +73,6 @@ class Charset:
 
     def get_next_index(self):
         while self.next_index in self.by_index:
-            if self.enable_pairs and self.next_index < self.size // 2 and self.next_index + self.size // 2 not in self.by_index:
-                return self.next_index + self.size // 2
             self.next_index += 1
             if self.next_index >= self.size:
                 raise RuntimeError("out of characters")

@@ -56,11 +56,18 @@ class CharacterImage:
         self.height = self.image.height // self.character_height
         self.count = self.width * self.height
         self.character_size = self.character_width // 8 * self.character_height
+        self.cache = {}
 
     def get(self, index):
+        if index in self.cache:
+            return self.cache[index]
         return self.get_xy(index % self.width, index // self.width)
 
     def get_xy(self, x, y):
+        index = x + y * self.width
+        if index in self.cache:
+            return self.cache[index]
+
         y *= self.character_height
         x *= self.character_width
         value = b""
@@ -82,5 +89,6 @@ class CharacterImage:
         if got_hole:
             if got_pixel:
                 raise RuntimeError("partial hole at {x}, {y}")
-            return None
+            value = None
+        self.cache[index] = value
         return value

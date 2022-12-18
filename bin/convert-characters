@@ -66,6 +66,7 @@ class Spec:
             self.width = Spec.decode(yaml, "width", 8)
             self.height = Spec.decode(yaml, "height", 8)
             self.name = Spec.decode(yaml, "name")
+            self.predefined = Spec.decode(yaml, "predefined", {})
 
     class Image:
         def __init__(self, yaml, spec):
@@ -211,6 +212,9 @@ assembler = AssemblerOutput.AssemblerOutput(specs.assembler, output.get_file())
 charset = Charset.Charset(specs.charset.count, bytes((specs.charset.width * specs.charset.height) // 8), True)
 
 assembler.header(args.specs)
+
+for index, value in specs.charset.predefined.items():
+    charset.add_with_index(bytes.fromhex(value), index)
 
 images = []
 
