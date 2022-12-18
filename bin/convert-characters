@@ -78,6 +78,7 @@ class Spec:
             self.slice_y = Spec.decode(yaml, "slice-y", 1)
             self.enable_skip_blank = Spec.decode(yaml, "skip-blank", False)
             self.type = Spec.decode(yaml, "type")
+            self.offset = Spec.decode(yaml, "offset", 0)
 
             self.keep_blanks = {}
             for value in Spec.decode(yaml, "keep-blanks", []):
@@ -110,12 +111,12 @@ def process_charset(image, image_specs, prerun):
     for index in range(count):
         value = image.get(index)
         if not (all(x == 0 for x in value) and image_specs.skip_blank(index)):
-            charset.add_with_index(image.get(index), index)
+            charset.add_with_index(image.get(index), index + image_specs.offset)
             if image_specs.inverted == Inverted.CREATE:
                 value2 = b""
                 for b in value:
                     value2 += (b ^ 255).to_bytes(1, byteorder="little")
-                charset.add_with_index(value2, index + charset.size // 2)
+                charset.add_with_index(value2, index + charset.size // 2 + image_specs.offset)
         if image_specs.inverted == Inverted.PRESENT:
             value = image.get(index + count)
             if not (all(x == 255 for x in value) and image_specs.skip_blank(index + count)):
