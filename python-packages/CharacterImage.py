@@ -34,7 +34,9 @@ class CharacterImage:
     palette = {
         0x00000000: 1,
         0x00ffffff: 0,
-        0xff000000: 0
+        0xff000000: 0,
+        0x80000000: 0,
+        0x0040ff40: -1
     }
 
     def __init__(self, filename, character_width, character_height, additional_palette=None):
@@ -63,11 +65,22 @@ class CharacterImage:
         x *= self.character_width
         value = b""
         i = 0
+        got_pixel = False
+        got_hole = False
         for yy in range(y, y + self.character_height):
             for xx in range(x, x + self.character_width, 8):
                 byte = 0
                 for bit in range(0, 8):
-                    byte |= self.image.get(xx + bit, yy) << (7 - bit)
+                    pixel = self.image.get(xx + bit, yy)
+                    if pixel == -1:
+                        got_hole = True
+                    else:
+                        got_pixel = True
+                        byte |= self.image.get(xx + bit, yy) << (7 - bit)
                 value += byte.to_bytes(1, byteorder="little")
                 i += 1
+        if got_hole:
+            if got_pixel:
+                raise RuntimeError("partial hole at {x}, {y}")
+            return None
         return value

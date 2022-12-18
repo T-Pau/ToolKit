@@ -93,10 +93,16 @@ class Charset:
         else:
             return self.empty
 
+    @property
+    def max_index(self):
+        return max(self.by_index, key=int)
+
+    @property
+    def charcter_count(self):
+        return len(self.by_index)
+
     def get_bytes(self, full=False):
-        end = self.size
-        if not full:
-            end = max(self.by_index, key=int)
+        end = self.size if full else self.max_index
         bytes_array = b""
         for index in range(end):
             value = self.get_value(index)

@@ -114,7 +114,7 @@ def process_charset(image, image_specs, prerun):
             if image_specs.inverted == Inverted.CREATE:
                 value2 = b""
                 for b in value:
-                    value2 += (b^255).to_bytes(1, byteorder="little")
+                    value2 += (b ^ 255).to_bytes(1, byteorder="little")
                 charset.add_with_index(value2, index + charset.size // 2)
         if image_specs.inverted == Inverted.PRESENT:
             value = image.get(index + count)
@@ -160,13 +160,17 @@ def process_image(image, image_specs, prerun):
                         value2 = image.get_xy(x * width + xx + inverted_x_offset, y * height + yy + inverted_y_offset)
                         if image_specs.inverted == Inverted.IF_DIFFERENT and value == value2:
                             value2 = None
-                    if value2 is None:
+                    if value is None:
                         if not prerun:
-                            char = charset.add(value)
+                            runlength.skip(1)
                     else:
-                        char = charset.add_pair(value, value2)
-                    if not prerun:
-                        runlength.add(char)
+                        if value2 is None:
+                            if not prerun:
+                                char = charset.add(value)
+                        else:
+                            char = charset.add_pair(value, value2)
+                        if not prerun:
+                            runlength.add(char)
             if not prerun:
                 parts.append(runlength.end())
 
@@ -223,6 +227,7 @@ for image_spec, image in zip(specs.images, images):
     processors[image_spec.type](image, image_spec, False)
 
 assembler.global_bytes(specs.charset.name, charset.get_bytes())
+assembler.comment(f"{charset.charcter_count} of {charset.size} characters used")
 
 output.close()
 dependencies.write()
