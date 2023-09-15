@@ -89,7 +89,7 @@ class Spec:
             return self.enable_skip_blank and index not in self.keep_blanks
 
     def __init__(self, yaml):
-        self.assembler = Spec.decode(yaml, "assembler", "cc65")
+        self.assembler = Spec.decode(yaml, "assembler", "xlr8")
         self.screen_width = Spec.decode(yaml, "screen_width")
         self.charset = Spec.Charset(Spec.decode(yaml, "charset"))
         if "images" in yaml:

@@ -38,11 +38,20 @@ class Section(enum.Enum):
 
 class AssemblerFormat:
     assemblers = {
+        "xlr8": {
+            "byte": ".data",
+            "comment": "; ",
+            "data_section": ".section data",
+            "export": ".global",
+            "use_objects": True,
+            "word": ".data"
+        },
         "cc65": {
             "byte": ".byte",
             "comment": "; ",
             "data_section": ".rodata",
             "export": ".export",
+            "use_objects": False,
             "word": ".word"
         },
         "z88dk": {
@@ -50,6 +59,7 @@ class AssemblerFormat:
             "comment": "; ",
             "data_section": "section data_user",
             "export": "public",
+            "use_objects": False,
             "word": "word"
         }
     }
@@ -63,6 +73,7 @@ class AssemblerFormat:
         self.comment = assembler_format["comment"]
         self.data_section = assembler_format["data_section"]
         self.export = assembler_format["export"]
+        self.use_objects = assembler_format["use_objects"]
         self.word = assembler_format["word"]
 
 
@@ -103,8 +114,11 @@ class AssemblerOutput:
 
     def global_symbol(self, name):
         self.empty_line()
-        print(f"{self.assembler.export} {name}", file=self.file)
-        print(f"{name}:", file=self.file)
+        if (self.assembler.use_objects):
+            print(f"{self.assembler.export} {name} {{", file=self.file)
+        else:
+            print(f"{self.assembler.export} {name}", file=self.file)
+            print(f"{name}:", file=self.file)
 
     def header(self, input_file):
         self.comment(f"This file is automatically created by {sys.argv[0]} from {input_file}.")
@@ -113,18 +127,28 @@ class AssemblerOutput:
 
     def local_symbol(self, name):
         self.empty_line()
-        print(f"{name}:", file=self.file)
+        if (self.assembler.use_objects):
+            print(f"{name} {{", file=self.file)
+        else:
+            print(f"{name}:", file=self.file)
+
+    def end_object(self):
+        if self.assembler.use_objects:
+            print("}", file=self.file)
 
     def parts(self, name, parts, include_count=True):
         if include_count:
             self.global_symbol(f"{name}_count")
             self.byte(len(parts))
+            self.end_object()
         self.global_symbol(name)
         for i in range(len(parts)):
             self.word(f"{name}_{i}")
+        self.end_object()
         for i in range(len(parts)):
             self.local_symbol(f"{name}_{i}")
             self.bytes(parts[i])
+            self.end_object()
 
     def word(self, value):
         print(f"    {self.assembler.word} {value}", file=self.file)
@@ -133,3 +157,4 @@ class AssemblerOutput:
         self.data_section()
         self.global_symbol(name)
         self.bytes(bytes_array)
+        self.end_object()

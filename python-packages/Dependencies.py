@@ -48,6 +48,7 @@ class Dependencies:
         self.dependencies.add(filename)
 
     def write(self):
-        with open(self.filename, "w") as file:
-            print(f"{self.target}: ", end="", file=file)
-            print(" ".join(self.dependencies), file=file)
+        if self.filename is not None:
+            with open(self.filename, "w") as file:
+                print(f"{self.target}: ", end="", file=file)
+                print(" ".join(self.dependencies), file=file)
