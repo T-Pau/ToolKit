@@ -150,6 +150,27 @@ class AssemblerOutput:
             self.bytes(parts[i])
             self.end_object()
 
+    def string(self, value, encoding=None):
+        print(f"    .data \"{value}\"", end="", file=self.file)
+        if encoding is not None:
+            print(f":{encoding}", end="", file=self.file)
+        print("", file=self.file)
+
+    def data(self, value, encoding=None):
+        if type(value) != list:
+            value = [value]
+        print(f"    .data ", end="", file=self.file)
+        first = True
+        for v in value:
+            if first:
+                first = False
+            else:
+                print(", ", end="", file=self.file)
+            print(f"{v}", end="", file=self.file)
+            if encoding is not None:
+                print(f":{encoding}", file=self.file)
+        print("", file=self.file)
+
     def word(self, value):
         print(f"    {self.assembler.word} {value}", file=self.file)
 
