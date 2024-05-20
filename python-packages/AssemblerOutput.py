@@ -42,7 +42,7 @@ class AssemblerFormat:
             "byte": ".data",
             "comment": "; ",
             "data_section": ".section data",
-            "export": ".global",
+            "export": ".public",
             "use_objects": True,
             "word": ".data"
         },

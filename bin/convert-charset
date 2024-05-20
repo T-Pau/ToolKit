@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-  convert-characters -- convert multiple images into one character set
+  convert-charset -- convert character set images
   Copyright (C) Dieter Baron
 
   The author can be contacted at <dillo@tpau.group>.
@@ -28,24 +28,52 @@
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-import argparse
-import sys
 import os
+import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
 
-import Screens
+import argparse
 
-parser = argparse.ArgumentParser(description='Runlength encode screen data.')
+import AssemblerOutput
+import AtomicOutput
+import CharacterImage
+import Dependencies
 
-parser.add_argument("input_file")
-parser.add_argument("output_file")
-parser.add_argument("-D", action="append", dest="defines")
+
+parser = argparse.ArgumentParser(description='Convert charset image.')
+
+parser.add_argument("image")
+parser.add_argument("output")
+parser.add_argument("name")
+parser.add_argument("-i", dest="inverted", action="store_true", help="create inverted charset")
+parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+
 args = parser.parse_args()
 
-input_file_name = args.input_file
-output_file_name = args.output_file
+output = AtomicOutput.AtomicOutput()
 
+output.set_filename(args.output)
+dependencies = Dependencies.Dependencies(args.depfile, args.output)
+dependencies.add(args.image)
 
-screens = Screens.Screens(defines=args.defines)
-if not screens.convert(input_file_name, output_file_name):
-    sys.exit(1)
+charset = CharacterImage.CharacterImage(args.image, 8, 8)
+
+assembler = AssemblerOutput.AssemblerOutput("xlr8", output.get_file())
+
+assembler.header(args.image)
+
+binary = bytearray()
+
+for index in range(0, charset.count):
+    binary += charset.get(index)
+
+assembler.global_bytes(args.name, binary)
+
+for i, v in enumerate(binary):
+    binary[i] = ~v & 0xff
+
+if args.inverted:
+    assembler.global_bytes(args.name + "_inverted", binary)
+
+output.close()
+dependencies.write()

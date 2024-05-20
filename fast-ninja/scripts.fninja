@@ -1,0 +1,8 @@
+bin_directory = $top_source_directory/Toolkit/bin
+
+rule convert-charset
+    command = {{$bin_directory/convert-charset}} -M $depfile $flags $in $out $name
+    depfile = $out.d
+
+rule convert-screens
+    command = {{$bin_directory/convert-screens}} -M $depfile $in $out
