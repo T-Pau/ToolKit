@@ -1,3 +1,4 @@
+import os.path
 import re
 import sys
 
@@ -73,7 +74,7 @@ class Source:
 
 
 class Screens:
-    def __init__(self, options=None, defines=None):
+    def __init__(self, dependencies, options=None, defines=None):
         self.name = ""
         self.title_length = 0
         self.title_xor = 0
@@ -83,9 +84,10 @@ class Screens:
         self.single_screen = False
         self.prefix = b""
         self.postfix = b""
-        self.assembler = "z88dk"
+        self.assembler = "xlr8"
         self.word_wrap = False
 
+        self.dependencies = dependencies
         self.encoder = RunlengthEncoder.RunlengthEncoder()
         self.in_preamble = True
         self.compressed_screens = []
@@ -214,6 +216,10 @@ class Screens:
             start = line.find("\"")
             end = line.rfind("\"")
             filename = line[start + 1:end]
+            # TODO: proper search, only if filename doens't contain directory
+            if not os.path.isfile(filename):
+                filename = os.path.join(os.path.dirname(self.input_file), filename)
+            self.dependencies.add(filename)
             if filename.endswith(".bin"):
                 self.include_binary_file(filename)
             else:
@@ -382,12 +388,12 @@ class Screens:
                 self.title_xor = value
 
     def write_output(self, output_file):
-        with open(output_file, "w") as file:
-            output = AssemblerOutput.AssemblerOutput(self.assembler, file)
-            output.header(self.input_file)
-            output.data_section()
-            if self.single_screen:
-                output.global_symbol(self.name)
-                output.bytes(self.compressed_screens[0])
-            else:
-                output.parts(self.name, self.compressed_screens)
+        output = AssemblerOutput.AssemblerOutput(self.assembler, output_file)
+        output.header(self.input_file)
+        output.data_section()
+        if self.single_screen:
+            output.global_symbol(self.name)
+            output.bytes(self.compressed_screens[0])
+            output.end_object()
+        else:
+            output.parts(self.name, self.compressed_screens)

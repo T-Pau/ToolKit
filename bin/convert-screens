@@ -33,6 +33,8 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
 
+import AtomicOutput
+import Dependencies
 import Screens
 
 parser = argparse.ArgumentParser(description='Runlength encode screen data.')
@@ -40,12 +42,21 @@ parser = argparse.ArgumentParser(description='Runlength encode screen data.')
 parser.add_argument("input_file")
 parser.add_argument("output_file")
 parser.add_argument("-D", action="append", dest="defines")
+parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
 args = parser.parse_args()
+
+output = AtomicOutput.AtomicOutput()
+
+output.set_filename(args.output_file)
+dependencies = Dependencies.Dependencies(args.depfile, args.output_file)
 
 input_file_name = args.input_file
 output_file_name = args.output_file
 
 
-screens = Screens.Screens(defines=args.defines)
-if not screens.convert(input_file_name, output_file_name):
-    sys.exit(1)
+screens = Screens.Screens(dependencies, defines=args.defines)
+if not screens.convert(input_file_name, output.get_file()):
+    output.abort("") # TODO: error message
+
+output.close()
+dependencies.write()

@@ -5,4 +5,5 @@ rule convert-charset
     depfile = $out.d
 
 rule convert-screens
-    command = {{$bin_directory/convert-screens}} -M $depfile $in $out
+    command = {{$bin_directory/convert-screens}} -M $depfile $flags $in $out
+    depfile = $out.d
