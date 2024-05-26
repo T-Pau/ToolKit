@@ -41,6 +41,11 @@
 :
 }
 
+; Load address into X/Y
+.public .macro load_word address {
+    ldx #<address
+    ldy #>address
+}
 
 .public .macro store_word address, value {
     lda #<(value)
