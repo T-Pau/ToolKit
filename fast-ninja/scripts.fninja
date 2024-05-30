@@ -1,9 +1,17 @@
 bin_directory = $top_source_directory/Toolkit/bin
 
+rule convert-bitmap
+    command = {{$bin_directory/convert-bitmap}} -M $depfile $flags $in $out $name
+    depfile = $out.d
+
 rule convert-charset
     command = {{$bin_directory/convert-charset}} -M $depfile $flags $in $out $name
     depfile = $out.d
 
 rule convert-screens
     command = {{$bin_directory/convert-screens}} -M $depfile $flags $in $out
+    depfile = $out.d
+
+rule convert-sprites
+    command = {{$bin_directory/convert-sprites}} -M $depfile $flags $in $out $name
     depfile = $out.d

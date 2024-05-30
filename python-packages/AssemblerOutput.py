@@ -28,12 +28,6 @@
 
 
 import sys
-import enum
-
-
-class Section(enum.Enum):
-    NONE = enum.auto()
-    DATA = enum.auto()
 
 
 class AssemblerFormat:
@@ -42,7 +36,9 @@ class AssemblerFormat:
             "byte": ".data",
             "comment": "; ",
             "data_section": ".section data",
+            "section_prefix": ".section",
             "export": ".public",
+            "align": ".align",
             "use_objects": True,
             "word": ".data"
         },
@@ -69,20 +65,27 @@ class AssemblerFormat:
             raise RuntimeError(f"unknown assembler '{assembler}'")
         assembler_format = AssemblerFormat.assemblers[assembler]
 
+        self.align = assembler_format["align"]
         self.byte = assembler_format["byte"]
         self.comment = assembler_format["comment"]
         self.data_section = assembler_format["data_section"]
         self.export = assembler_format["export"]
+        self.section_prefix = assembler_format["section_prefix"]
         self.use_objects = assembler_format["use_objects"]
         self.word = assembler_format["word"]
+
+    def section(self, name):
+        if name == "data":
+            return self.data_section
+        else:
+            return f"{self.section_prefix} {name}"
 
 
 class AssemblerOutput:
     def __init__(self, assembler_format: str, file):
         self.assembler = AssemblerFormat(assembler_format)
         self.file = file
-        self.current_section = Section.NONE
-
+        self.current_section = None
     def byte(self, value):
         print(f"    {self.assembler.byte} {value}", file=self.file)
 
@@ -105,17 +108,25 @@ class AssemblerOutput:
         print(f"{self.assembler.comment} {comment}", file=self.file)
 
     def data_section(self):
-        if self.current_section != Section.DATA:
-            print(f"{self.assembler.data_section}", file=self.file)
-            self.current_section = Section.DATA
+        self.section("data")
+
+    def section(self, section):
+        if self.current_section != section:
+            print(self.assembler.section(section), file=self.file)
+            self.current_section = section
 
     def empty_line(self):
         print("", file=self.file)
 
-    def global_symbol(self, name):
+    def global_symbol(self, name, section=None, align=None):
+        if section is not None:
+            self.section(section)
         self.empty_line()
+        align_string = ""
+        if align is not None:
+            align_string = f" {self.assembler.align} {align}"
         if (self.assembler.use_objects):
-            print(f"{self.assembler.export} {name} {{", file=self.file)
+            print(f"{self.assembler.export} {name}{align_string} {{", file=self.file)
         else:
             print(f"{self.assembler.export} {name}", file=self.file)
             print(f"{name}:", file=self.file)
@@ -125,7 +136,9 @@ class AssemblerOutput:
         self.comment(f"Do not edit.")
         self.empty_line()
 
-    def local_symbol(self, name):
+    def local_symbol(self, name, section=None):
+        if section is not None:
+            self.section(section)
         self.empty_line()
         if (self.assembler.use_objects):
             print(f"{name} {{", file=self.file)
@@ -174,8 +187,7 @@ class AssemblerOutput:
     def word(self, value):
         print(f"    {self.assembler.word} {value}", file=self.file)
 
-    def global_bytes(self, name, bytes_array):
-        self.data_section()
-        self.global_symbol(name)
+    def global_bytes(self, name, bytes_array, section = "data", align=None):
+        self.global_symbol(name, section, align)
         self.bytes(bytes_array)
         self.end_object()
