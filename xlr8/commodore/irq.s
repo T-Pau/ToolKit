@@ -149,6 +149,10 @@ lines_per_frame .reserve 1
         stx IMR
     }
 
+    lda IRQ_VECTOR
+    sta kernal_irq
+    lda IRQ_VECTOR + 1
+    sta kernal_irq + 1
     lda #<irq_main
     sta IRQ_VECTOR
     lda #>irq_main
@@ -157,6 +161,26 @@ lines_per_frame .reserve 1
     rts
 }
 
+
+; Restores Kernal IRQ routine.
+.public restore_irq {
+    sei
+    .if .defined(USE_VICII) {
+        ; enable cia 1 interrupts
+        lda #$81
+        sta CIA1_INTERRUPT
+        ; disable rasterline irq
+        lda #0
+        sta VIC_INTERRUPT_MASK
+    }
+
+    lda kernal_irq
+    sta IRQ_VECTOR
+    lda kernal_irq + 1
+    sta IRQ_VECTOR + 1
+    cli
+    rts
+}
 
 .public set_irq_table {
     stx table
@@ -278,3 +302,7 @@ addr:
 :	sty index
     rts
 }
+
+.section reserved
+
+kernal_irq .reserve 2
