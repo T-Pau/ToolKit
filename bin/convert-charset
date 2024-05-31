@@ -38,6 +38,7 @@ import AssemblerOutput
 import AtomicOutput
 import CharacterImage
 import Dependencies
+import RunlengthEncoder
 
 
 parser = argparse.ArgumentParser(description='Convert charset image.')
@@ -47,6 +48,7 @@ parser.add_argument("output")
 parser.add_argument("name")
 parser.add_argument("-i", dest="inverted", action="store_true", help="create inverted charset")
 parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+parser.add_argument("-r", dest="runlength", action="store_true", help="runlength encode bitmap data")
 
 args = parser.parse_args()
 
@@ -62,17 +64,42 @@ assembler = AssemblerOutput.AssemblerOutput("xlr8", output.get_file())
 
 assembler.header(args.image)
 
-binary = bytearray()
+def invert(data):
+    for i, v in enumerate(data):
+        data[i] = ~v & 0xff
 
-for index in range(0, charset.count):
-    binary += charset.get(index)
+
+if args.runlength:
+    runlength = RunlengthEncoder.RunlengthEncoder()
+    for index in range(0, charset.count):
+        char = charset.get(index)
+        if char is None:
+            runlength.skip(8)
+        else:
+            runlength.add_bytes(char)
+    binary = runlength.end()
+else:
+    binary = bytearray()
+
+    for index in range(0, charset.count):
+        binary += charset.get(index)
 
 assembler.global_bytes(args.name, binary)
 
-for i, v in enumerate(binary):
-    binary[i] = ~v & 0xff
-
 if args.inverted:
+    if args.runlength:
+        runlength = RunlengthEncoder.RunlengthEncoder()
+        for index in range(0, charset.count):
+            char = charset.get(index)
+            if char is None:
+                runlength.skip(8)
+            else:
+                invert(char)
+                runlength.add_bytes(char)
+        binary = runlength.end()
+    else:
+        invert(binary)
+
     assembler.global_bytes(args.name + "_inverted", binary)
 
 output.close()
