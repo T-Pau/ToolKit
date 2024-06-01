@@ -61,41 +61,45 @@ class Spec:
             return default_value
 
     class Charset:
-        def __init__(self, yaml):
-            self.count = Spec.decode(yaml, "count", 256)
-            self.width = Spec.decode(yaml, "width", 8)
-            self.height = Spec.decode(yaml, "height", 8)
-            self.name = Spec.decode(yaml, "name")
-            self.predefined = Spec.decode(yaml, "predefined", {})
+        def __init__(self, yaml_spec):
+            self.count = Spec.decode(yaml_spec, "count", 256)
+            self.width = Spec.decode(yaml_spec, "width", 8)
+            self.height = Spec.decode(yaml_spec, "height", 8)
+            self.name = Spec.decode(yaml_spec, "name")
+            self.predefined = Spec.decode(yaml_spec, "predefined", {})
 
     class Image:
-        def __init__(self, yaml, spec):
-            self.file = Spec.decode(yaml, "file")
-            self.inverted = Inverted(Spec.decode(yaml, "inverted", "none"))
-            self.include_count = Spec.decode(yaml, "include-count", True)
-            self.name = Spec.decode(yaml, "name")
-            self.screen_width = Spec.decode(yaml, "screen-width", spec.screen_width)
-            self.slice_x = Spec.decode(yaml, "slice-x", 1)
-            self.slice_y = Spec.decode(yaml, "slice-y", 1)
-            self.enable_skip_blank = Spec.decode(yaml, "skip-blank", False)
-            self.type = Spec.decode(yaml, "type")
-            self.offset = Spec.decode(yaml, "offset", 0)
+        def __init__(self, yaml_spec, spec):
+            self.file = os.path.join(spec.directory, Spec.decode(yaml_spec, "file"))
+            self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
+            self.include_count = Spec.decode(yaml_spec, "include-count", True)
+            self.name = Spec.decode(yaml_spec, "name")
+            self.screen_width = Spec.decode(yaml_spec, "screen-width", spec.screen_width)
+            self.slice_x = Spec.decode(yaml_spec, "slice-x", 1)
+            self.slice_y = Spec.decode(yaml_spec, "slice-y", 1)
+            self.enable_skip_blank = Spec.decode(yaml_spec, "skip-blank", False)
+            self.type = Spec.decode(yaml_spec, "type")
+            self.offset = Spec.decode(yaml_spec, "offset", 0)
 
             self.keep_blanks = {}
-            for value in Spec.decode(yaml, "keep-blanks", []):
+            for value in Spec.decode(yaml_spec, "keep-blanks", []):
                 self.keep_blanks[value] = True
 
         def skip_blank(self, index):
             return self.enable_skip_blank and index not in self.keep_blanks
 
-    def __init__(self, yaml):
-        self.assembler = Spec.decode(yaml, "assembler", "xlr8")
-        self.screen_width = Spec.decode(yaml, "screen_width")
-        self.charset = Spec.Charset(Spec.decode(yaml, "charset"))
-        if "images" in yaml:
-            self.images = [Spec.Image(spec, self) for spec in yaml["images"]]
-        else:
-            self.images = []
+    def __init__(self, spec_file):
+        with open(args.specs, "r") as stream:
+            yaml_spec = yaml.safe_load(stream)
+
+            self.directory = os.path.dirname(spec_file)
+            self.assembler = Spec.decode(yaml_spec, "assembler", "xlr8")
+            self.screen_width = Spec.decode(yaml_spec, "screen_width")
+            self.charset = Spec.Charset(Spec.decode(yaml_spec, "charset"))
+            if "images" in yaml_spec:
+                self.images = [Spec.Image(spec, self) for spec in yaml_spec["images"]]
+            else:
+                self.images = []
 
 
 output = AtomicOutput.AtomicOutput()
@@ -111,7 +115,7 @@ def process_charset(image, image_specs, prerun):
 
     for index in range(count):
         value = image.get(index)
-        if not (all(x == 0 for x in value) and image_specs.skip_blank(index)):
+        if value is not None:
             charset.add_with_index(image.get(index), index + image_specs.offset)
             if image_specs.inverted == Inverted.CREATE:
                 value2 = b""
@@ -120,7 +124,7 @@ def process_charset(image, image_specs, prerun):
                 charset.add_with_index(value2, index + charset.size // 2 + image_specs.offset)
         if image_specs.inverted == Inverted.PRESENT:
             value = image.get(index + count)
-            if not (all(x == 255 for x in value) and image_specs.skip_blank(index + count)):
+            if value is not None:
                 charset.add_with_index(value, index + charset.size // 2)
 
 
@@ -202,11 +206,10 @@ dependencies = Dependencies.Dependencies(args.depfile, args.output)
 dependencies.add(args.specs)
 
 
-with open(args.specs, "r") as stream:
-    try:
-        specs = Spec(yaml.safe_load(stream))
-    except yaml.YAMLError as exc:
-        output.abort(f"can't load specs from '{args.specs}: {exc}")
+try:
+    specs = Spec(args.specs)
+except yaml.YAMLError as exc:
+    output.abort(f"can't load specs from '{args.specs}: {exc}")
 
 assembler = AssemblerOutput.AssemblerOutput(specs.assembler, output.get_file())
 charset = Charset.Charset(specs.charset.count, bytes((specs.charset.width * specs.charset.height) // 8), True)
