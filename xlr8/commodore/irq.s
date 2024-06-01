@@ -90,7 +90,7 @@ table .reserve 2
 
 .section reserved
 
-index .reserve 1
+irq_index .reserve 1
 
 table_length .reserve 1
 
@@ -105,6 +105,12 @@ lines_per_frame .reserve 1
 .pre_end
 
 .section code
+
+.macro set_irq_table new_table {
+    load_word new_table
+    lda #.sizeof(new_table)
+    jsr set_irq_table
+}
 
 .public init_irq {
     sei
@@ -187,7 +193,7 @@ lines_per_frame .reserve 1
     sty table + 1
     sta table_length
     lda #0
-    sta index
+    sta irq_index
     jmp setup_next_irq
 }
 
@@ -227,7 +233,7 @@ irq_main {
 
 
 setup_next_irq {
-    ldy index
+    ldy irq_index
 
     .if .defined(USE_VIC) {
         lda #0
@@ -299,7 +305,7 @@ addr:
     cpy table_length
     bne :+
     ldy #0
-:	sty index
+:	sty irq_index
     rts
 }
 
