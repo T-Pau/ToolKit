@@ -66,6 +66,7 @@ class Spec:
             self.width = Spec.decode(yaml_spec, "width", 8)
             self.height = Spec.decode(yaml_spec, "height", 8)
             self.name = Spec.decode(yaml_spec, "name")
+            self.rl_encode = Spec.decode(yaml_spec, "rl_encode", False)
             self.predefined = Spec.decode(yaml_spec, "predefined", {})
 
     class Image:
@@ -77,16 +78,8 @@ class Spec:
             self.screen_width = Spec.decode(yaml_spec, "screen-width", spec.screen_width)
             self.slice_x = Spec.decode(yaml_spec, "slice-x", 1)
             self.slice_y = Spec.decode(yaml_spec, "slice-y", 1)
-            self.enable_skip_blank = Spec.decode(yaml_spec, "skip-blank", False)
             self.type = Spec.decode(yaml_spec, "type")
             self.offset = Spec.decode(yaml_spec, "offset", 0)
-
-            self.keep_blanks = {}
-            for value in Spec.decode(yaml_spec, "keep-blanks", []):
-                self.keep_blanks[value] = True
-
-        def skip_blank(self, index):
-            return self.enable_skip_blank and index not in self.keep_blanks
 
     def __init__(self, spec_file):
         with open(args.specs, "r") as stream:
@@ -234,7 +227,13 @@ for image_spec in specs.images:
 for image_spec, image in zip(specs.images, images):
     processors[image_spec.type](image, image_spec, False)
 
-assembler.global_bytes(specs.charset.name, charset.get_bytes())
+charset_bytes = charset.get_bytes()
+if specs.charset.rl_encode:
+    runlength = RunlengthEncoder.RunlengthEncoder()
+    runlength.add_bytes(charset_bytes)
+    charset_bytes = runlength.end()
+assembler.global_bytes(specs.charset.name, charset_bytes)
+
 assembler.comment(f"{charset.charcter_count} of {charset.size} characters used")
 
 output.close()

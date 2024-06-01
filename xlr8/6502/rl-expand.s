@@ -57,6 +57,12 @@ RL_SKIP = $fe
 ; soucre_ptr: runlength encoded string
 ; destination_ptr: destination to expand to
 
+.public .macro rl_expand destination, source {
+    store_word destination_ptr, destination
+    store_word source_ptr, source
+    jsr rl_expand
+}
+
 .public rl_expand {
     ldy #0
 loop:
