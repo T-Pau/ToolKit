@@ -189,12 +189,15 @@ lines_per_frame .reserve 1
 }
 
 .public set_irq_table {
+    sei
     stx table
     sty table + 1
     sta table_length
     lda #0
     sta irq_index
-    jmp setup_next_irq
+    jsr setup_next_irq
+    cli
+    rts
 }
 
 
