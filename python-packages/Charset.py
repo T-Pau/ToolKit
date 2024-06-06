@@ -100,7 +100,7 @@ class Charset:
         return len(self.by_index)
 
     def get_bytes(self, full=False):
-        end = self.size if full else self.max_index
+        end = self.size if full else self.max_index + 1
         bytes_array = b""
         for index in range(end):
             value = self.get_value(index)
