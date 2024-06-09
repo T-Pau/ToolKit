@@ -19,3 +19,7 @@ rule convert-screens
 rule convert-sprites
     command = {{$bin_directory/convert-sprites}} -M $depfile $flags $in $out $name
     depfile = $out.d
+
+rule create-disk
+    command = {{$bin_directory/create-disk}} -M $depfile $flags $out $in
+    depfile = $out.d
