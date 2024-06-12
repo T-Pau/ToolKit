@@ -75,11 +75,13 @@ class Spec:
             self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
             self.include_count = Spec.decode(yaml_spec, "include-count", True)
             self.name = Spec.decode(yaml_spec, "name")
+            self.rl_encode = Spec.decode(yaml_spec, "rl-encode", True)
             self.screen_width = Spec.decode(yaml_spec, "screen-width", spec.screen_width)
             self.slice_x = Spec.decode(yaml_spec, "slice-x", 1)
             self.slice_y = Spec.decode(yaml_spec, "slice-y", 1)
             self.type = Spec.decode(yaml_spec, "type")
             self.offset = Spec.decode(yaml_spec, "offset", 0)
+            self.trim = RunlengthEncoder.Trim(Spec.decode(yaml_spec, "trim", "trailing"))
 
     def __init__(self, spec_file):
         with open(args.specs, "r") as stream:
@@ -147,10 +149,13 @@ def process_image(image, image_specs, prerun):
     for y in range(image_specs.slice_y):
         for x in range(image_specs.slice_x):
             if not prerun:
-                runlength = RunlengthEncoder.RunlengthEncoder()
+                if image_spec.rl_encode:
+                    runlength = RunlengthEncoder.RunlengthEncoder(image_spec.trim)
+                else:
+                    chars = b""
             for yy in range(height):
                 if yy > 0 and image_specs.screen_width is not None:
-                    if not prerun:
+                    if not prerun and image_spec.rl_encode:
                         runlength.skip(image_specs.screen_width - width)
                 for xx in range(width):
                     value = image.get_xy(x * width + xx, y * height + yy)
@@ -161,17 +166,37 @@ def process_image(image, image_specs, prerun):
                             value2 = None
                     if value is None:
                         if not prerun:
-                            runlength.skip(1)
+                            if image_spec.rl_encode:
+                                runlength.skip(1)
+                            else:
+                                raise RuntimeError(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: can't encode hole")
                     else:
-                        if value2 is None:
+                        try:
+                            if value2 is None:
+                                if not prerun:
+                                    count_before = charset.character_count
+                                    char = charset.add(value)
+                                    if args.verbose and count_before != charset.character_count:
+                                        print(f"{y}.{xx}/{yy}: {value.hex()}  -> {hex(char)}")
+                            else:
+                                count_before = charset.character_count
+                                char = charset.add_pair(value, value2)
+                                if args.verbose and count_before != charset.character_count:
+                                    print(f"{y}.{xx}/{yy}: {value.hex()} {value2.hex()} -> {hex(char)}")
                             if not prerun:
-                                char = charset.add(value)
-                        else:
-                            char = charset.add_pair(value, value2)
-                        if not prerun:
-                            runlength.add(char)
+                                if image_spec.rl_encode:
+                                    runlength.add(char)
+                                else:
+                                    chars += char.to_bytes(1, byteorder="little")
+                        except Exception as ex:
+                            print(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: {ex}")
+                            # TODO: record error
+                            
             if not prerun:
-                parts.append(runlength.end())
+                if image_spec.rl_encode:
+                    parts.append(runlength.end())
+                else:
+                    parts.append(chars)
 
     if not prerun:
         if count == 1:
@@ -191,6 +216,7 @@ parser = argparse.ArgumentParser(description='Convert images to charset and scre
 parser.add_argument("specs")
 parser.add_argument("output")
 parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+parser.add_argument("-v", dest="verbose", action="store_true", help="print debug output")
 
 args = parser.parse_args()
 
@@ -217,15 +243,23 @@ images = []
 for image_spec in specs.images:
     dependencies.add(image_spec.file)
     image = CharacterImage.CharacterImage(image_spec.file, specs.charset.width, specs.charset.height,
-                                          {0x80000000: 0, 0x808080: 0})
+                                          {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0})
     images.append(image)
+    chars_before = charset.character_count
     if image_spec.type in processors:
         processors[image_spec.type](image, image_spec, True)
     else:
         output.abort(f"unknown type '{image_spec.type}'")
+    chars_after = charset.character_count
+    if args.verbose:
+        print(f"{image_spec.file}: double {chars_after - chars_before}/{chars_after}")
 
 for image_spec, image in zip(specs.images, images):
+    chars_before = charset.character_count
     processors[image_spec.type](image, image_spec, False)
+    chars_after = charset.character_count
+    if args.verbose:
+        print(f"{image_spec.file}: single {chars_after - chars_before}/{chars_after}")
 
 charset_bytes = charset.get_bytes()
 if specs.charset.rl_encode:
@@ -234,7 +268,7 @@ if specs.charset.rl_encode:
     charset_bytes = runlength.end()
 assembler.global_bytes(specs.charset.name, charset_bytes)
 
-assembler.comment(f"{charset.charcter_count} of {charset.size} characters used")
+assembler.comment(f"{charset.character_count} of {charset.size} characters used")
 
 output.close()
 dependencies.write()

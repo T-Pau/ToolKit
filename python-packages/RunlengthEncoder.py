@@ -28,6 +28,12 @@
 
 import enum
 
+class Trim(enum.Enum):
+    none = "none"
+    leading = "leading"
+    trailing = "trailing"
+    both = "both"
+
 
 class RunlengthEncoder:
     class State(enum.Enum):
@@ -35,13 +41,15 @@ class RunlengthEncoder:
         char = enum.auto()
         skip = enum.auto()
 
-    def __init__(self):
+    def __init__(self, trim=Trim.trailing):
         self.compressed = b""
-        self.code_runlength = 0xff
-        self.code_skip = 0xfe
+        self.literal = b""
+        self.code_runlength = 0x80
+        self.code_skip = 0xc0
         self.state = RunlengthEncoder.State.empty
         self.length = 0
         self.last_byte = -1
+        self.trim = trim
 
     def add_bytes(self, data):
         for byte in data:
@@ -55,18 +63,19 @@ class RunlengthEncoder:
             self.length = 1
         else:
             self.length += 1
-            if self.length == 255:
-                self.end_run()
 
     def skip(self, amount):
+        if amount == 0:
+            return
+        if self.state == RunlengthEncoder.State.empty and (self.trim == Trim.leading or self.trim == Trim.both):
+            return
         self.set_state(RunlengthEncoder.State.skip)
         self.length += amount
 
     def end(self):
-        if self.state == RunlengthEncoder.State.char:
+        if self.state == RunlengthEncoder.State.char or (self.state == RunlengthEncoder.State.skip and self.trim != Trim.trailing and self.trim != Trim.both):
             self.set_state(RunlengthEncoder.State.empty)
-        self.output(self.code_runlength)
-        self.output(0)
+        self.encode_end()
         result = self.compressed
         self.compressed = b""
         return result
@@ -75,7 +84,7 @@ class RunlengthEncoder:
         if self.state == state:
             return
         if self.state == RunlengthEncoder.State.char:
-            self.end_run()
+            self.end_char()
         elif self.state == RunlengthEncoder.State.skip:
             self.end_skip()
         self.state = state
@@ -85,30 +94,61 @@ class RunlengthEncoder:
     def end_run(self):
         if self.state != RunlengthEncoder.State.char:
             return
-        if self.length > 2 or self.last_byte == self.code_runlength or self.last_byte == self.code_skip:
-            self.output(self.code_runlength)
-            self.output(self.length)
-            self.output(self.last_byte)
+        if self.length > 2:
+            self.encode_literal(self.literal)
+            self.literal = b""
+            self.encode_run(self.length, self.last_byte)
         else:
             for i in range(self.length):
-                self.output(self.last_byte)
+                self.literal += self.last_byte.to_bytes(1, byteorder="little")
+        self.empty()
+
+    def end_char(self):
+        if self.state != RunlengthEncoder.State.char:
+            return
+        self.end_run()
+        self.encode_literal(self.literal)
+        self.literal = b""
         self.empty()
 
     def end_skip(self):
         if self.state != RunlengthEncoder.State.skip:
             return
-        while self.length > 255:
-            self.output(self.code_skip)
-            self.output(255)
-            self.length -= 255
-        if self.length > 0:
-            self.output(self.code_skip)
-            self.output(self.length)
+        self.encode_skip(self.length)
         self.empty()
 
     def empty(self):
         self.length = 0
         self.last_byte = -1
+
+    def encode_literal(self, data):
+        offset = 0
+        while offset + 127 < len(data):
+            self.output(127)
+            self.output(data[offset:offset+127])
+            offset += 127
+        if offset < len(data):
+            self.output(len(data) - offset)
+            self.output(data[offset:])
+
+    def encode_run(self, length, byte):
+        while self.length > 63:
+            self.output(self.code_runlength + 63)
+            self.output(self.last_byte)
+            self.length -= 63
+        if self.length > 0:
+            self.output(self.code_runlength + self.length)
+            self.output(self.last_byte)
+
+    def encode_skip(self, length):
+        while length > 63:
+            self.output(self.code_skip + 63)
+            length -= 63
+        if length > 0:
+            self.output(self.code_skip + length)
+
+    def encode_end(self):
+        self.output(self.code_skip)
 
     def output(self, byte):
         if type(byte) is bytes:

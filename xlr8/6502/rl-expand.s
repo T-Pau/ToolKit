@@ -25,36 +25,59 @@
 ;  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 ;  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-RL_RUN = $ff
-RL_SKIP = $fe
+RL_RUN = $80
+RL_SKIP = $c0
+
+.section zero_page
+
+rl_tmp .reserve 1
 
 .section code
 
 .public .macro rl_encode length, byte {
-    .if length > 255 {
-        .repeat i, length / 255 {
-            .data RL_RUN, 255, byte
+    .if length > 63 {
+        .repeat i, length / 63 {
+            .data RL_RUN + 63, byte:1
         }
     }
-    ;.data $ff, length .mod 255, byte
-    .data RL_RUN, length - 255 * (length / 255):1, byte
+    ;.data RL_RUN + length .mod 63, byte:1
+    .data RL_RUN + length - 63 * (length / 63):1, byte:1
 }
 
 .public .macro rl_skip length {
-    .if length > 255 {
-        .repeat i, length / 255 {
-            .data RL_SKIP, $ff
+    .if length > 63 {
+        .repeat i, length / 63 {
+            .data RL_SKIP + 63
         }
     }
-    ;.data $ff, length .mod 255, byte
-    .data RL_SKIP, length - 255 * (length / 255):1
+    ;.data RL_SKIP + length .mod 63
+    .data RL_SKIP + length - 63 * (length / 63):1
+}
+
+.public .macro rl_literal b0, b1 = .none, b2 = .none, b3 = .none {
+    .if b3 == .none {
+        .if b2 == .none {
+            .if b1 == .none {
+                .data $01, b0:1
+            }
+            .else {
+                .data $02, b0:1, b1:1
+            }
+        }
+        .else {
+            .data $03, b0:1, b1:1, b2:1
+        }
+    }
+    .else {
+        .data $04, b0:1, b1:1, b2:1
+    }
 }
 
 .public .macro rl_end {
-    .data RL_RUN, $00
+    .data RL_SKIP
 }
 
-; soucre_ptr: runlength encoded string
+; source_ptr: runlength encoded string
 ; destination_ptr: destination to expand to
 
 .public .macro rl_expand destination, source {
@@ -67,39 +90,73 @@ RL_SKIP = $fe
     ldy #0
 loop:
     lda (source_ptr),y
+    bmi encoded
+
+    ; literal run
     inc_16 source_ptr
-    cmp #RL_SKIP
-    bne no_skip
+    tay
+    tax
+    dey
+:   lda (source_ptr),y
+    sta (destination_ptr),y
+    dey
+    bpl :-
+    iny
+    clc
+    txa
+    adc source_ptr
+    sta source_ptr
+    bcc :+
+    inc source_ptr + 1
+    clc
+:   txa
+    adc destination_ptr
+    sta destination_ptr
+    bcc loop
+    inc destination_ptr + 1
+    bne loop
+
+encoded:
+    cmp #$c0
+    bcs skip
+
+    ; fill run
+    and #$3f
+    sta rl_tmp
+    iny
     lda (source_ptr),y
+    ldy rl_tmp
+    dey
+:   sta (destination_ptr),y
+    dey
+    bpl :-
+    iny
+    clc
+    lda #2
+    adc source_ptr
+    sta source_ptr
+    bcc :+
+    inc source_ptr + 1
+    clc
+:   lda rl_tmp
+    adc destination_ptr
+    sta destination_ptr
+    bcc loop
+    inc destination_ptr + 1
+    bne loop
+
+skip:
+    ; skip
     inc_16 source_ptr
+    and #$3f
+    beq end
     clc
     adc destination_ptr
     sta destination_ptr
     bcc loop
     inc destination_ptr + 1
     bne loop
-no_skip:
-    ldx #$01
-    cmp #RL_RUN
-    bne runlength_loop
-    lda (source_ptr),y
-    inc_16 source_ptr
-    cmp #$00
-    bne :+
+
+end:
     rts
-:   tax
-    lda (source_ptr),y
-    inc_16 source_ptr
-runlength_loop:
-    sta (destination_ptr),y
-    iny
-    dex
-    bne runlength_loop
-    tya
-    clc
-    adc destination_ptr
-    sta destination_ptr
-    bcc :+
-    inc destination_ptr + 1
-:   jmp rl_expand
 }

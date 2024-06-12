@@ -38,6 +38,7 @@ import AssemblerOutput
 import AtomicOutput
 import CharacterImage
 import Dependencies
+import RunlengthEncoder
 
 
 parser = argparse.ArgumentParser(description='Convert sprite image.')
@@ -46,8 +47,9 @@ parser.add_argument("image")
 parser.add_argument("output")
 parser.add_argument("name")
 parser.add_argument("-a", dest="align", action="store_true", help="align object")
-parser.add_argument("-s", metavar="SECTION", dest="section", help="put object in SECTION", default="data")
 parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+parser.add_argument("-r", dest="runlength", action="store_true", help="runlength encode sprite data")
+parser.add_argument("-s", metavar="SECTION", dest="section", help="put object in SECTION", default="data")
 
 args = parser.parse_args()
 
@@ -83,6 +85,10 @@ for sprite_y in range(0, num_sprites_y):
 align = None
 if args.align:
     align = 64
+if args.runlength:
+    encoder = RunlengthEncoder.RunlengthEncoder()
+    encoder.add_bytes(binary)
+    binary = encoder.end()
 assembler.global_bytes(args.name, binary, args.section, align)
 
 output.close()

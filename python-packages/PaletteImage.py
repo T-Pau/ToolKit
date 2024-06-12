@@ -46,4 +46,4 @@ class PaletteImage:
         if color in self.palette:
             return self.palette[color]
         else:
-            raise RuntimeError(f"invalid color {pixel} at ({x},{y})")
+            raise RuntimeError(f"invalid color {pixel} at {self.filename}:({x},{y})")

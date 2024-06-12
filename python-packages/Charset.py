@@ -96,7 +96,7 @@ class Charset:
         return max(self.by_index, key=int)
 
     @property
-    def charcter_count(self):
+    def character_count(self):
         return len(self.by_index)
 
     def get_bytes(self, full=False):
