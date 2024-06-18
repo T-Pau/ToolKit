@@ -46,9 +46,10 @@ parser = argparse.ArgumentParser(description='Convert sprite image.')
 parser.add_argument("image")
 parser.add_argument("output")
 parser.add_argument("name")
+parser.add_argument("-a", dest="align", action="store_true", help="align object")
 parser.add_argument("-r", dest="runlength", action="store_true", help="runlength encode bitmap data")
-parser.add_argument("-s", metavar="SECTION", dest="section", help="put object in SECTION", default="data")
 parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+parser.add_argument("-s", metavar="SECTION", dest="section", help="put object in SECTION", default="data")
 
 args = parser.parse_args()
 
@@ -69,12 +70,15 @@ binary = bytearray()
 for index in range(0, charset.count):
     binary += charset.get(index)
 
+align = None
 if args.runlength:
     runlength = RunlengthEncoder.RunlengthEncoder()
     runlength.add_bytes(binary)
     binary = runlength.end()
+elif args.align:
+    align = 0x2000
 
-assembler.global_bytes(args.name, binary, args.section)
+assembler.global_bytes(args.name, binary, args.section, align)
 
 output.close()
 dependencies.write()
