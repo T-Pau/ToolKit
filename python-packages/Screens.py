@@ -74,7 +74,7 @@ class Source:
 
 
 class Screens:
-    def __init__(self, dependencies, options=None, defines=None):
+    def __init__(self, dependencies, options=None, defines=None, include_directories=None):
         self.name = ""
         self.title_length = 0
         self.title_xor = 0
@@ -86,6 +86,7 @@ class Screens:
         self.postfix = b""
         self.assembler = "xlr8"
         self.word_wrap = False
+        self.include_directories = include_directories or []
 
         self.dependencies = dependencies
         self.encoder = RunlengthEncoder.RunlengthEncoder()
@@ -148,6 +149,15 @@ class Screens:
             self.error("invalid conditional: " + str(e))
             return False
 
+    def find_file(self, file_name):
+        if os.path.exists(file_name):
+            return file_name
+        for directory in [os.path.dirname(self.input_file)] + self.include_directories:
+            name = os.path.join(directory, file_name)
+            if os.path.exists(name):
+                return name
+        raise RuntimeError(f"file {file_name} not found")
+    
     def process(self):
         while len(self.files) > 0:
             while line := self.files[-1].readline():
@@ -199,11 +209,11 @@ class Screens:
                     self.error("unexpected tokens after .else")
                 self.showing[-1] = self.showing_else[-1]
             return
-        elif line.startswith(".endif"):
+        elif line.startswith(".end"):
             if len(words) != 1:
                 self.error("unexpected tokens after .else")
             if len(self.showing) == 1:
-                self.error(".endif outside .if")
+                self.error(".end outside .if")
                 return
             self.showing.pop(-1)
             self.showing_else.pop(-1)
@@ -215,10 +225,7 @@ class Screens:
         if line.startswith(".include "):
             start = line.find("\"")
             end = line.rfind("\"")
-            filename = line[start + 1:end]
-            # TODO: proper search, only if filename doens't contain directory
-            if not os.path.isfile(filename):
-                filename = os.path.join(os.path.dirname(self.input_file), filename)
+            filename = self.find_file(line[start + 1:end])
             self.dependencies.add(filename)
             if filename.endswith(".bin"):
                 self.include_binary_file(filename)

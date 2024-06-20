@@ -42,6 +42,7 @@ parser = argparse.ArgumentParser(description='Runlength encode screen data.')
 parser.add_argument("input_file")
 parser.add_argument("output_file")
 parser.add_argument("-D", action="append", dest="defines")
+parser.add_argument("-I", action="append", dest="include_directories")
 parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
 args = parser.parse_args()
 
@@ -54,7 +55,7 @@ input_file_name = args.input_file
 output_file_name = args.output_file
 
 
-screens = Screens.Screens(dependencies, defines=args.defines)
+screens = Screens.Screens(dependencies, defines=args.defines, include_directories=args.include_directories)
 if not screens.convert(input_file_name, output.get_file()):
     output.abort("") # TODO: error message
 
