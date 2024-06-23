@@ -5,6 +5,8 @@ import sys
 import AssemblerOutput
 import RunlengthEncoder
 
+map_chars = r"'(.)'(?:-'(.)')?"
+map_codes = r"\$([0-9a-fA-F]*)(?:-\$([0-9a-fA-F]*))?"
 
 class ExpressionParser:
     def __init__(self, defines):
@@ -74,7 +76,7 @@ class Source:
 
 
 class Screens:
-    def __init__(self, dependencies, options=None, defines=None, include_directories=None):
+    def __init__(self, dependencies, options=None, defines=None, include_directories=None, images=None, assembler_output=None):
         self.name = ""
         self.title_length = 0
         self.title_xor = 0
@@ -87,6 +89,7 @@ class Screens:
         self.assembler = "xlr8"
         self.word_wrap = False
         self.include_directories = include_directories or []
+        self.images = images or []
 
         self.dependencies = dependencies
         self.encoder = RunlengthEncoder.RunlengthEncoder()
@@ -99,6 +102,7 @@ class Screens:
         self.files = []
         self.input_file = ""
         self.ok = True
+        self.assembler_output = assembler_output
 
         if options is not None:
             self.set_options(options)
@@ -222,9 +226,18 @@ class Screens:
         if not all(self.showing):
             return
 
-        if line.startswith(".include "):
+        if line == ".image":
+            if len(self.images) != 1:
+                raise RuntimeError(".image without parameter but not exactly one image defined")
+            self.add_bytes(self.images[0])
+        elif line.startswith(".image "):
+            index = Int(line[7:])
+            self.add_bytes(self.image[index])
+        elif line.startswith(".include "):
             start = line.find("\"")
             end = line.rfind("\"")
+            if start == end:
+                raise RuntimeError("invalid .include")
             filename = self.find_file(line[start + 1:end])
             self.dependencies.add(filename)
             if filename.endswith(".bin"):
@@ -338,7 +351,21 @@ class Screens:
         self.end_screen()
 
     def add_map(self, source_string, target_string):
-        source_range = list(map(lambda x: int(x, 0), re.sub(r" *;.*", "", source_string.replace("$", "0x")).split("-")))
+        match = re.search(map_chars, source_string)
+        if match:
+            source_range = [ord(match.group(1)[0])]
+            end = match.group(2)
+            if end is not None:
+                source_range.append(ord(end[0]))
+        else:
+            match = re.search(map_codes, source_string)
+            if match:
+                source_range = [int("0x" + match.group(1), 0)]
+                end = match.group(2)
+                if end is not None:
+                    source_range.append(int("0x" + end, 0))
+            else:
+                raise RuntimeError(f"invalid map source {source_string}")
         if len(source_range) == 1:
             source_range.append(source_range[0])
         target = int(target_string.replace("$", "0x"), 0)
@@ -346,6 +373,9 @@ class Screens:
         for source in range(source_range[0], source_range[1] + 1):
             self.charmap[source] = target
             target += 1
+
+    def add_bytes(self, string):
+        self.encoder.add_bytes(string)
 
     def add_string(self, string, length, byte_xor=0):
         self.encoder.add_bytes(self.map_string(string.ljust(length), byte_xor))
@@ -395,8 +425,11 @@ class Screens:
                 self.title_xor = value
 
     def write_output(self, output_file):
-        output = AssemblerOutput.AssemblerOutput(self.assembler, output_file)
-        output.header(self.input_file)
+        if self.assembler_output is not None:
+            output = self.assembler_output
+        else:
+            output = AssemblerOutput.AssemblerOutput(self.assembler, output_file)
+            output.header(self.input_file)
         output.data_section()
         if self.single_screen:
             output.global_symbol(self.name)

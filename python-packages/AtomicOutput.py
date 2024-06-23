@@ -49,3 +49,11 @@ class AtomicOutput:
             self.file = None
         if self.temp_name:
             os.remove(self.temp_name)
+    
+    def run(self, code):
+        try:
+            code()
+            self.close()
+        except RuntimeError as ex:
+            print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
+            self.discard()
