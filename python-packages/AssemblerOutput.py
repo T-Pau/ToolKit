@@ -110,6 +110,15 @@ class AssemblerOutput:
     def data_section(self):
         self.section("data")
 
+    def pre_if(self, predicate):
+        print(f".pre_if {predicate}", file=self.file)
+
+    def pre_else(self):
+        print(f".pre_else", file=self.file)
+
+    def pre_end(self):
+        print(f".pre_end", file=self.file)
+
     def section(self, section):
         if self.current_section != section:
             print(self.assembler.section(section), file=self.file)
@@ -169,19 +178,22 @@ class AssemblerOutput:
             print(f":{encoding}", end="", file=self.file)
         print("", file=self.file)
 
-    def data(self, value, encoding=None):
+    def data(self, value, encoding=None, line_length=16):
         if type(value) != list:
             value = [value]
-        print(f"    .data ", end="", file=self.file)
-        first = True
+
+        index = 0
         for v in value:
-            if first:
-                first = False
+            if index % line_length == 0:
+                if index > 0:
+                    print(file=self.file)
+                print(f"    .data ", end="", file=self.file)
             else:
                 print(", ", end="", file=self.file)
             print(f"{v}", end="", file=self.file)
             if encoding is not None:
                 print(f":{encoding}", file=self.file)
+            index += 1
         print("", file=self.file)
 
     def word(self, value):
@@ -191,3 +203,4 @@ class AssemblerOutput:
         self.global_symbol(name, section, align)
         self.bytes(bytes_array)
         self.end_object()
+

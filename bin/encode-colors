@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+
+"""
+  encode-color -- encode color information given in rectangles.
+  Copyright (C) Dieter Baron
+
+  The author can be contacted at <dillo@tpau.group>.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  2. The names of the authors may not be used to endorse or promote
+     products derived from this software without specific prior
+     written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE AUTHORS "AS IS" AND ANY EXPRESS
+  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
+
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
+
+import re
+
+import RunlengthEncoder
+import Script
+
+strip_comments = r" *;.*"
+
+class Object:
+    def __init__(self, name, width, height, color) -> None:
+        self.name = name
+        self.width = width
+        self.height = height
+        self.colors = [[[color for x in range(width)] for y in range(height)]]
+        self.predicate = None
+        self.predicate_index = None
+    
+    def fill(self, x, y, width, height, color) -> None:
+        for index in range(len(self.colors)):
+            if self.predicate_index is None or index == self.predicate_index:
+                for xx in range(x, x + width):
+                    for yy in range(y, y + height):
+                        self.colors[index][yy][xx] = color
+    
+    def is_in_if(self):
+        return self.predicate_index is not None
+
+    def start_if(self, predicate):
+        if self.predicate_index is not None:
+            raise RuntimeError("nested if conditions not suppored")
+        index = 1
+        if predicate[0] == "!":
+            predicate = predicate[1:]
+            index = 0
+        if self.predicate is None:
+            self.predicate = predicate
+            self.colors.append(self.colors[0])
+        elif predicate != self.predicate:
+            raise RuntimeError("multiple different if conditions not supported")
+        self.predicate_index = index
+
+    def start_else(self):
+        if self.predicate_index is None:
+            raise RuntimeError(".else outside .if")
+        self.predicate_index = not self.predicate_index
+    
+    def end_if(self):
+        self.predicate_index = None
+
+    def output(self, assembler, runlength):
+        if self.predicate is not None:
+            assembler.pre_if(self.predicate)
+            self.output_data(1, assembler, runlength)
+            assembler.pre_else()
+        self.output_data(0, assembler, runlength)
+        if self.predicate is not None:
+            assembler.pre_end()
+    
+    def output_data(self, index, assembler, runlength):
+        assembler.local_symbol(self.name)
+        data = []
+        for y in range(self.height):
+            for x in range(self.width):
+                data.append(self.colors[index][y][x])
+
+        if runlength:
+            encoder = RunlengthEncoder.RunlengthEncoder(binary=False)
+            encoder.add_bytes(data)
+            data = encoder.end()
+        assembler.data(data)
+        assembler.end_object()
+
+
+class EncodeColor(Script.Script):
+    def __init__(self) -> None:
+        super().__init__("Encode colors.", runlength_encode = True, assembler_output = True)
+        self.arg_parser.add_argument("file")        
+
+    def execute_sub(self):
+        with open(self.args.file, "r") as file:
+            while line := self.next_line(file):
+                words = line.split(" ")
+                if len(words) != 5 or words[4] != "{":
+                    raise RuntimeError(f"invalid object '{line}'")
+                object = self.parse_object(file, words[0], int(words[1]), int(words[2]), words[3])
+                object.output(self.assembler, self.args.runlength)
+
+    def parse_object(self, file, name, width, height, color):
+        object = Object(name, width, height, color)
+        while line := self.next_line(file):
+            if line == "}":
+                if object.is_in_if():
+                    object.end_if()
+                else:
+                    return object
+            elif line.startswith(".if "):
+                object.start_if(line[3:].strip())
+            elif line == ".else":
+                object.start_else()
+            else:
+                words = line.split(" ")
+                if len(words) != 5:
+                    raise RuntimeError(f"invalid rectangle '{line}'")
+                object.fill(int(words[0]), int(words[1]), int(words[2]), int(words[3]), words[4])
+
+        raise RuntimeError("unclosed object")
+
+    def next_line(self, file):
+        while line := file.readline():
+            line = re.sub(strip_comments, "", line).strip()
+            if line != "":
+                return line
+        return None
+
+EncodeColor().run()

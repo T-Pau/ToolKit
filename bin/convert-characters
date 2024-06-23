@@ -224,8 +224,9 @@ def process_image(image, image_spec, prerun):
 
     if not prerun:
         if image_spec.screen_file is not None:
-            screens = Screens.Screens(dependencies, images=parts, assembler_output=assembler)
-            screens.convert(os.path.join(os.path.dirname(args.specs), image_spec.screen_file), output.get_file())
+            screens = Screens.Screens(dependencies, images=list(map(lambda part: {"width": width, "height": height, "data": part}, parts)), assembler_output=assembler)
+            if not screens.convert(os.path.join(os.path.dirname(args.specs), image_spec.screen_file), output.get_file()):
+                raise RuntimeError("")
         else:
             if count == 1:
                 assembler.global_bytes(image_spec.name, parts[0])

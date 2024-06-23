@@ -90,6 +90,8 @@ class Screens:
         self.word_wrap = False
         self.include_directories = include_directories or []
         self.images = images or []
+        self.image_padding_left = b""
+        self.image_padding_right = b""
 
         self.dependencies = dependencies
         self.encoder = RunlengthEncoder.RunlengthEncoder()
@@ -123,6 +125,7 @@ class Screens:
 
     def convert(self, input_file, output_file):
         self.input_file = input_file
+        self.dependencies.add(self.input_file)
         self.files = [Source(input_file)]
         self.in_preamble = True
         self.compressed_screens = []
@@ -229,10 +232,10 @@ class Screens:
         if line == ".image":
             if len(self.images) != 1:
                 raise RuntimeError(".image without parameter but not exactly one image defined")
-            self.add_bytes(self.images[0])
+            self.add_image(self.images[0])
         elif line.startswith(".image "):
-            index = Int(line[7:])
-            self.add_bytes(self.image[index])
+            index = int(line[7:])
+            self.add_image(self.image[index])
         elif line.startswith(".include "):
             start = line.find("\"")
             end = line.rfind("\"")
@@ -277,6 +280,10 @@ class Screens:
                 self.line_skip = int(words[1])
             elif words[0] == "title_length":
                 self.title_length = int(words[1])
+            elif words[0] == "image_padding_left":
+                self.image_padding_left = self.map_string(words[1])
+            elif words[0] == "image_padding_right":
+                self.image_padding_right = self.map_string(words[1])
             elif words[0] == "map":
                 self.add_map(words[1], words[2])
             elif words[0] == "assembler":
@@ -437,3 +444,17 @@ class Screens:
             output.end_object()
         else:
             output.parts(self.name, self.compressed_screens)
+
+    def add_image(self, image):
+        width = image["width"]
+        height = image["height"]
+        self.current_line += height
+        if self.current_line > self.lines:
+            self.error("too many lines")
+        if len(self.image_padding_left) + len(self.image_padding_right) + width != self.line_length:
+            self.error(f"image width {width} plus padding {len(self.image_padding_left)}+{len(self.image_padding_right)} is not line length {self.line_length}")
+        # TODO: check that image width + padding is line length
+        for y in range(height):
+            self.add_bytes(self.image_padding_left)
+            self.add_bytes(image["data"][width*y:width*(y+1)])
+            self.add_bytes(self.image_padding_right)
