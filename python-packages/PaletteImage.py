@@ -28,16 +28,32 @@ from PIL import Image
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+from collections import namedtuple
+
+PixelSize = namedtuple("PixelSize", "x y")
+
 class PaletteImage:
-    def __init__(self, filename, palette):
+    def __init__(self, filename, palette, pixel_size=PixelSize(1,1)):
         self.palette = palette
         self.filename = filename
+        self.pixel_size = pixel_size
         self.image = Image.open(filename)
-        self.width = self.image.width
-        self.height = self.image.height
+        if self.image.width % self.pixel_size.x != 0:
+            raise RuntimeError(f"image width {self.image.width} is not multiple of pixel size {self.pixel_size.x} at {self.filename}")
+        if self.image.width % self.pixel_size.x != 0:
+            raise RuntimeError(f"image height {self.image.height} is not multiple of pixel size {self.pixel_size.y} at {self.filename}")
+        self.width = self.image.width // self.pixel_size.x
+        self.height = self.image.height // self.pixel_size.y
 
     def get(self, x, y):
-        pixel = self.image.getpixel((x, y))
+        pixel = None
+        for sub_y in range(self.pixel_size.y):
+            for sub_x in range(self.pixel_size.x):
+                sub_pixel = self.image.getpixel((x * self.pixel_size.x + sub_x, y * self.pixel_size.y + sub_y))
+                if pixel is None:
+                    pixel = sub_pixel
+                elif pixel != sub_pixel:
+                    raise RuntimeError(f"non-uniform logical pixel at {self.filename}:({x},{y})")
         alpha = pixel[3] if len(pixel) > 3 else 255
         if alpha == 0:
             color = 0xff000000

@@ -39,11 +39,11 @@ class CharacterImage:
         0x0040ff40: -1
     }
 
-    def __init__(self, filename, character_width, character_height, additional_palette=None):
+    def __init__(self, filename, character_width, character_height, additional_palette=None, pixel_size=PaletteImage.PixelSize(1, 1)):
         if additional_palette is not None:
             for color, index in additional_palette.items():
                 self.palette[color] = index
-        self.image = PaletteImage.PaletteImage(filename, self.palette)
+        self.image = PaletteImage.PaletteImage(filename, self.palette, pixel_size)
         self.character_width = character_width
         self.character_height = character_height
         if self.character_width % 8 != 0:

@@ -42,6 +42,7 @@ import AtomicOutput
 import CharacterImage
 import Charset
 import Dependencies
+import PaletteImage
 import RunlengthEncoder
 import Screens
 
@@ -91,6 +92,9 @@ class Spec:
             self.charset = Spec.decode(yaml_spec, "charset", 0)
             if type(self.charset) is dict and self.type != "image":
                 raise RuntimeError("multiple charsets only supported for images")
+            pixel_size_x = Spec.decode(yaml_spec, "pixel-size-x", 1)
+            pixel_size_y = Spec.decode(yaml_spec, "pixel-size-y", 1)
+            self.pixel_size = PaletteImage.PixelSize(pixel_size_x, pixel_size_y)
 
     def __init__(self, spec_file):
         with open(args.specs, "r") as stream:
@@ -286,7 +290,7 @@ def main():
     for image_spec in specs.images:
         dependencies.add(image_spec.file)
         image = CharacterImage.CharacterImage(image_spec.file, char_width, char_height,
-                                            {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0})
+                                            {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0}, pixel_size=image_spec.pixel_size)
         images.append(image)
         if image_spec.type in processors:
             processors[image_spec.type](image, image_spec, True)
