@@ -1,9 +1,9 @@
 rule link
-  command = xlr8 --verbose-errors -I $build_directory --target $target --depfile $depfile --symbol-map $out.sym --output $out $in $libs
+  command = xlr8 --verbose-errors -I $build_directory --target $target --depfile $depfile --symbol-map $out.sym --output $out $flags $in $libs
   depfile = $out.d
 
 rule library
-  command = xlr8 --verbose-errors -I $build_directory --create-library --target $target --depfile $depfile --output $out $in $libs
+  command = xlr8 --verbose-errors -I $build_directory --create-library --target $target --depfile $depfile --output $out $flags $in $libs
   depfile = $out.d
 
 rule vice-ll
