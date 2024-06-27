@@ -61,7 +61,7 @@ dependencies.add(args.image)
 
 charset = CharacterImage.CharacterImage(args.image, 8, 8)
 
-assembler = AssemblerOutput.AssemblerOutput("xlr8", output.get_file())
+assembler = AssemblerOutput.AssemblerOutput(output.get_file())
 
 assembler.header(args.image)
 

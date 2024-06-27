@@ -65,7 +65,7 @@ if charset.width % 3 != 0:
 if charset.height % 21 != 0:
     raise RuntimeError("image width not multiple of 21")
 
-assembler = AssemblerOutput.AssemblerOutput("xlr8", output.get_file())
+assembler = AssemblerOutput.AssemblerOutput(output.get_file())
 
 assembler.header(args.image)
 

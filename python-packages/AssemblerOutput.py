@@ -30,70 +30,18 @@
 import sys
 
 
-class AssemblerFormat:
-    assemblers = {
-        "xlr8": {
-            "byte": ".data",
-            "comment": "; ",
-            "data_section": ".section data",
-            "section_prefix": ".section",
-            "export": ".public",
-            "align": ".align",
-            "use_objects": True,
-            "word": ".data"
-        },
-        "cc65": {
-            "byte": ".byte",
-            "comment": "; ",
-            "data_section": ".rodata",
-            "export": ".export",
-            "use_objects": False,
-            "word": ".word"
-        },
-        "z88dk": {
-            "byte": "byte",
-            "comment": "; ",
-            "data_section": "section data_user",
-            "export": "public",
-            "use_objects": False,
-            "word": "word"
-        }
-    }
-
-    def __init__(self, assembler):
-        if assembler not in AssemblerFormat.assemblers:
-            raise RuntimeError(f"unknown assembler '{assembler}'")
-        assembler_format = AssemblerFormat.assemblers[assembler]
-
-        self.align = assembler_format["align"]
-        self.byte = assembler_format["byte"]
-        self.comment = assembler_format["comment"]
-        self.data_section = assembler_format["data_section"]
-        self.export = assembler_format["export"]
-        self.section_prefix = assembler_format["section_prefix"]
-        self.use_objects = assembler_format["use_objects"]
-        self.word = assembler_format["word"]
-
-    def section(self, name):
-        if name == "data":
-            return self.data_section
-        else:
-            return f"{self.section_prefix} {name}"
-
-
 class AssemblerOutput:
-    def __init__(self, assembler_format: str, file):
-        self.assembler = AssemblerFormat(assembler_format)
+    def __init__(self, file):
         self.file = file
         self.current_section = None
     def byte(self, value):
-        print(f"    {self.assembler.byte} {value}", file=self.file)
+        print(f"    .data {value}", file=self.file)
 
     def bytes(self, bytes_array):
         i = 0
         for byte in bytes_array:
             if i == 0:
-                self.file.write(f"    {self.assembler.byte} ")
+                self.file.write("    .data ")
             else:
                 self.file.write(", ")
             self.file.write(f'${byte:02x}')
@@ -105,7 +53,7 @@ class AssemblerOutput:
             self.file.write("\n")
 
     def comment(self, comment):
-        print(f"{self.assembler.comment} {comment}", file=self.file)
+        print(f"; {comment}", file=self.file)
 
     def data_section(self):
         self.section("data")
@@ -121,7 +69,8 @@ class AssemblerOutput:
 
     def section(self, section):
         if self.current_section != section:
-            print(self.assembler.section(section), file=self.file)
+            self.empty_line()
+            print(f".section {section}", file=self.file)
             self.current_section = section
 
     def empty_line(self):
@@ -133,12 +82,8 @@ class AssemblerOutput:
         self.empty_line()
         align_string = ""
         if align is not None:
-            align_string = f" {self.assembler.align} {align}"
-        if (self.assembler.use_objects):
-            print(f"{self.assembler.export} {name}{align_string} {{", file=self.file)
-        else:
-            print(f"{self.assembler.export} {name}", file=self.file)
-            print(f"{name}:", file=self.file)
+            align_string = f" .align {align}"
+        print(f".public {name}{align_string} {{", file=self.file)
 
     def header(self, input_file):
         self.comment(f"This file is automatically created by {sys.argv[0]} from {input_file}.")
@@ -149,14 +94,10 @@ class AssemblerOutput:
         if section is not None:
             self.section(section)
         self.empty_line()
-        if (self.assembler.use_objects):
-            print(f"{name} {{", file=self.file)
-        else:
-            print(f"{name}:", file=self.file)
+        print(f"{name} {{", file=self.file)
 
     def end_object(self):
-        if self.assembler.use_objects:
-            print("}", file=self.file)
+        print("}", file=self.file)
 
     def parts(self, name, parts, include_count=True):
         if include_count:
@@ -197,7 +138,7 @@ class AssemblerOutput:
         print("", file=self.file)
 
     def word(self, value):
-        print(f"    {self.assembler.word} {value}", file=self.file)
+        print(f"    .data {value}:2", file=self.file)
 
     def global_bytes(self, name, bytes_array, section = "data", align=None):
         self.global_symbol(name, section, align)

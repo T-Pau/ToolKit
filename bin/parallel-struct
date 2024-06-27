@@ -131,7 +131,7 @@ with open(args.structs, "r") as stream:
     except yaml.YAMLError as exc:
         output.abort(f"can't load structs from '{args.structs}: {exc}")
 
-assembler = AssemblerOutput.AssemblerOutput("xlr8", output.get_file())
+assembler = AssemblerOutput.AssemblerOutput(output.get_file())
 assembler.header(args.structs)
 assembler.data_section()
 

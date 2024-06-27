@@ -13,7 +13,7 @@ class ExpressionParser:
         self.tokens = []
         self.defines = defines
 
-    def parse(self, tokens: [str]):
+    def parse(self, tokens):
         self.tokens = tokens
         self.tokens.reverse()
 
@@ -86,7 +86,6 @@ class Screens:
         self.single_screen = False
         self.prefix = b""
         self.postfix = b""
-        self.assembler = "xlr8"
         self.word_wrap = False
         self.include_directories = include_directories or []
         self.images = images or []
@@ -286,8 +285,6 @@ class Screens:
                 self.image_padding_right = self.map_string(words[1])
             elif words[0] == "map":
                 self.add_map(words[1], words[2])
-            elif words[0] == "assembler":
-                self.assembler = words[1]
             elif words[0] == "name":
                 self.name = words[1]
             elif words[0] == "title_xor":
@@ -412,9 +409,7 @@ class Screens:
 
     def set_options(self, options):
         for option, value in options:
-            if option == "assembler":
-                self.assembler = value
-            elif option == "line_length":
+            if option == "line_length":
                 self.line_length = value
             elif option == "lines":
                 self.lines = value
@@ -435,7 +430,7 @@ class Screens:
         if self.assembler_output is not None:
             output = self.assembler_output
         else:
-            output = AssemblerOutput.AssemblerOutput(self.assembler, output_file)
+            output = AssemblerOutput.AssemblerOutput(output_file)
             output.header(self.input_file)
         output.data_section()
         if self.single_screen:

@@ -27,7 +27,7 @@ class Script:
 
     def execute(self):
         if self.assembler_output:
-            self.assembler = AssemblerOutput.AssemblerOutput("xlr8", self.output_file())
+            self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.args.file)
             self.assembler.data_section()
         self.execute_sub()

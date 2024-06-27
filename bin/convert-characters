@@ -101,7 +101,6 @@ class Spec:
             yaml_spec = yaml.safe_load(stream)
 
             self.directory = os.path.dirname(spec_file)
-            self.assembler = Spec.decode(yaml_spec, "assembler", "xlr8")
             self.screen_width = Spec.decode(yaml_spec, "screen_width")
             if type(yaml_spec["charset"]) is list:
                 self.charset = []
@@ -267,7 +266,7 @@ def main():
     except yaml.YAMLError as exc:
         raise RuntimeError(f"can't load specs from '{args.specs}: {exc}")
 
-    assembler = AssemblerOutput.AssemblerOutput(specs.assembler, output.get_file())
+    assembler = AssemblerOutput.AssemblerOutput(output.get_file())
     char_width = None
     char_height = None
     for charset_spec in specs.charset:
