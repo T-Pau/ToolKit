@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 
 
 class AtomicOutput:
@@ -54,6 +55,11 @@ class AtomicOutput:
         try:
             code()
             self.close()
-        except RuntimeError as ex:
-            print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
+            return True
+        except Exception as ex:
+            if os.environ["TOOLKIT_DEBUG"] is not None:
+                traceback.print_exception(ex)
+            else:
+                print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             self.discard()
+            return False

@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+
+"""
+  convert-image -- Convert image to native format.
+  Copyright (C) Dieter Baron
+
+  The author can be contacted at <dillo@tpau.group>.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  2. The names of the authors may not be used to endorse or promote
+     products derived from this software without specific prior
+     written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE AUTHORS "AS IS" AND ANY EXPRESS
+  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
+
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
+
+import enum
+
+import BlockImage
+import RunlengthEncoder
+import Script
+
+palette_spectrum = {
+    0x000000: 0, # black
+    0x0022c7: 1, # blue
+    0xd62816: 2, # red
+    0xd433c7: 3, # magenta
+    0x00c525: 4, # green
+    0x00c7c9: 5, # cyan
+    0xccc82a: 6, # yellow
+    0xcacaca: 7, # white
+    0x002bfb: 9, # bright blue
+    0xff331c: 10, # bright red
+    0xff40fc: 11, # bright magenta
+    0x00f92f: 12, # bright green
+    0x00fbfe: 13, # bright cyan
+    0xfffc36: 14, # bright yellow
+    0xffffff: 15 # bright white
+}
+
+
+class ConvertImage(Script.Script):
+    def __init__(self) -> None:
+        super().__init__("Convert image to native format.", Script.Options(runlength_encode = True, assembler_output = True, symbol_name = True))
+        self.arg_parser.add_argument("image")
+        self.arg_parser.add_argument("-F", metavar="FORMAT", dest="format", help="image format")
+        self.format = None
+
+    # Get filename of input file.
+    def input_filename(self):
+        return self.args.image
+
+    def prepare(self):
+        if not self.args.format in ConvertImage.converters:
+            raise RuntimeError(f"unknown format {self.args.format}")
+
+    def execute_sub(self):
+        binary = ConvertImage.converters[self.args.format](self)
+        if self.args.runlength:
+            encoder = RunlengthEncoder.RunlengthEncoder()
+            encoder.add_bytes(binary)
+            binary = encoder.end()
+        self.assembler.global_bytes(self.symbol_name(), binary)
+
+    def convert_spectrum(self):
+        image = BlockImage.BlockImage(self.input_filename(), 8, 8, palette_spectrum)
+        if image.width != 32 or image.height != 24:
+            raise RuntimeError(f"image dimensions ({image.width}x{image.height}) don't match Spectrum screen (32,24)")
+        blocks = image.get_blocks()
+
+        screen = bytearray(8*32*24)
+        attributes = b""
+
+        for y, row in enumerate(blocks):
+            for x, block in enumerate(row):
+                if block.num_colors() > 2:
+                    raise RuntimeError(f"too many colors in cell ({x},{y})")
+                colors = block.get_colors()
+                if len(colors) == 1:
+                    colors = [0, colors[0]]
+                if (colors[0] > 8 and colors[1] < 8 and colors[1] > 1) or (colors[1] > 8 and colors[0] < 8 and colors[0] > 1):
+                    raise RuntimeError(f"can't mix bright and non-bright in cell ({x},{y})")
+                bytes = block.encode(colors)
+                offset = (y // 8) * 256 * 8 + (y % 8) * 32 + x
+                for yy in range(8):
+                    screen[offset + yy * 256] = bytes[yy][0]
+                attribute = (colors[1] & 0x7) | ((colors[0] & 0x7) << 3)
+                if colors[0] > 8 or colors[1] > 8:
+                    attribute |= 64
+                attributes += attribute.to_bytes(1, byteorder="little")
+
+        return screen + attributes
+        # return {"screen": screen, "attributes": attributes}
+    
+    converters = {
+        "spectrum": convert_spectrum
+    }
+
+ConvertImage().run()
