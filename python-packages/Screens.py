@@ -294,7 +294,7 @@ class Screens:
             elif words[0] == "word_wrap":
                 self.word_wrap = int(words[1])
             else:
-                raise RuntimeError(f"unknown command '" + words[0] + "' in line {self.line_number}")
+                self.error(f"unknown command '{words[0]}'")
 
     def process_screen_line(self, line):
         if line == "---":

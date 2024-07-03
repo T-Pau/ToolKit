@@ -1,5 +1,8 @@
 bin_directory = $top_source_directory/Toolkit/bin
 
+rule compress-screen
+    command = {{$bin_directory/compress-screen}} $in $out
+
 rule convert-bitmap
     command = {{$bin_directory/convert-bitmap}} -M $depfile $flags $in $out $name
     depfile = $out.d

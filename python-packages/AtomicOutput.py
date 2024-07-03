@@ -57,7 +57,7 @@ class AtomicOutput:
             self.close()
             return True
         except Exception as ex:
-            if os.environ["TOOLKIT_DEBUG"] is not None:
+            if "TOOLKIT_DEBUG" in os.environ:
                 traceback.print_exception(ex)
             else:
                 print(f"{sys.argv[0]}: {ex}", file=sys.stderr)

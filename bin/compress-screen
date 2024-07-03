@@ -48,11 +48,12 @@ elif input_file_name.endswith(".json"):
 
         parts = []
         encoder = RunlengthEncoder.RunlengthEncoder()
-        with open(spec["input_file"], "rb") as input_file:
+        filename = os.path.join(os.path.dirname(input_file_name), spec["input_file"])
+        with open(filename, "rb") as input_file:
             x = 0
             y = 0
             while byte := input_file.read(1):
-                encoder.add(byte)
+                encoder.add_bytes(byte)
                 if width > 0:
                     x += 1
                     if x == width:
