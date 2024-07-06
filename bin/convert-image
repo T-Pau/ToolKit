@@ -95,7 +95,8 @@ class ConvertImage(Script.Script):
                     raise RuntimeError(f"too many colors in cell ({x},{y})")
                 colors = block.get_colors()
                 if len(colors) == 1:
-                    colors = [0, colors[0]]
+                    colors.append(0)
+                colors.sort(reverse=True) # TODO: hack to match default black/gray screen
                 if (colors[0] > 8 and colors[1] < 8 and colors[1] > 1) or (colors[1] > 8 and colors[0] < 8 and colors[0] > 1):
                     raise RuntimeError(f"can't mix bright and non-bright in cell ({x},{y})")
                 bytes = block.encode(colors)
