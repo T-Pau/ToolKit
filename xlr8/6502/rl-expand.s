@@ -25,57 +25,11 @@
 ;  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 ;  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-RL_RUN = $80
-RL_SKIP = $c0
-
 .section zero_page
 
 rl_tmp .reserve 1
 
 .section code
-
-.public .macro rl_encode length, byte {
-    .if length > 63 {
-        .repeat i, length / 63 {
-            .data RL_RUN + 63, byte:1
-        }
-    }
-    ;.data RL_RUN + length .mod 63, byte:1
-    .data RL_RUN + length - 63 * (length / 63):1, byte:1
-}
-
-.public .macro rl_skip length {
-    .if length > 63 {
-        .repeat i, length / 63 {
-            .data RL_SKIP + 63
-        }
-    }
-    ;.data RL_SKIP + length .mod 63
-    .data RL_SKIP + length - 63 * (length / 63):1
-}
-
-.public .macro rl_literal b0, b1 = .none, b2 = .none, b3 = .none {
-    .if b3 == .none {
-        .if b2 == .none {
-            .if b1 == .none {
-                .data $01, b0:1
-            }
-            .else {
-                .data $02, b0:1, b1:1
-            }
-        }
-        .else {
-            .data $03, b0:1, b1:1, b2:1
-        }
-    }
-    .else {
-        .data $04, b0:1, b1:1, b2:1
-    }
-}
-
-.public .macro rl_end {
-    .data RL_SKIP
-}
 
 ; source_ptr: runlength encoded string
 ; destination_ptr: destination to expand to
