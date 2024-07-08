@@ -47,8 +47,8 @@
     jr nc, encoded
 
     ; literal run
-    ld b, a
-    ld c, 0
+    ld b, 0
+    ld c, a
     ldir
     jp rl_expand
 
@@ -91,15 +91,13 @@ skip:
 }
 
 
-; Copy character.
+; Calcualte address of character.
 ; Arguments:
 ;   a: number of character
-;   hl: destination
 ; Results:
-;   hl: next destination
-; Preserves: c, ix, iy
-.public copy_character {
-    ; calculate character address in de
+;   de: address of first byte of character.
+; Preserves: b, c, hl, ix, iy
+.macro calculate_character_address {
     ld e,a
     ld d,0
     ccf
@@ -115,16 +113,22 @@ skip:
     ld a,(current_charset + 1)
     adc a,d
     ld d,a
+}
 
-    ; copy character
+; Copy character.
+; Arguments:
+;   de: address of first byte of character.
+;   hl: destination
+; Result:
+;   hl: next destination
+; Preserves: c, ix, iy
+.macro copy_character {
     ld b, 8
 :   ld a,(de)
     ld (hl),a
     inc h
     inc de
     djnz :-
-
-    ; set hl to next destination
     inc l
     jr z, :+
     ld a, h
@@ -153,7 +157,8 @@ skip:
     ld c, a
 :   ld a, (iy)
     inc iy
-    call copy_character
+    calculate_character_address
+    copy_character
     dec c
     jr nz, :-
     jp rl_expand_chars
@@ -167,7 +172,8 @@ encoded:
     ld c, a
     ld a, (iy)
     inc iy
-:   call copy_character
+    calculate_character_address
+:   copy_character
     dec c
     jr z, rl_expand_chars
     ld a,e
@@ -185,11 +191,11 @@ skip:
     ; skip
     add a, l
     ld l, a
-    jr nc, rl_expand_chars
+    jr c, :+
     ld a, 8
     add a, h
     ld h, a
-    jp rl_expand_chars
+:   jp rl_expand_chars
 }
 
 .section reserved
