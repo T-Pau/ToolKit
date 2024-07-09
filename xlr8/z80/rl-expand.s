@@ -25,9 +25,6 @@
 ;  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 ;  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-.default RL_RUN = $80
-.default RL_SKIP = $c0
-
 .section code
 
 .public .macro rl_expand destination, source {

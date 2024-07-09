@@ -47,7 +47,7 @@ END_OF_IRQ {
 }
 .define USE_VICII
 
-.pre_else_if .defined(PLUS4)
+.pre_else_if .defined(PLUS4) || .defined(C16)
 END_OF_IRQ = $fcbe
 .define USE_TED
 
