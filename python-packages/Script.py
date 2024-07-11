@@ -112,4 +112,4 @@ class Script:
             self.assembler.header(self.input_filename())
             self.assembler.data_section()
         self.execute_sub()
-
+        self.dependencies.write()
