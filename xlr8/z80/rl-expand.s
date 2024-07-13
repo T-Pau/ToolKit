@@ -97,6 +97,7 @@ skip:
 .macro calculate_character_address {
     ld e,a
     ld d,0
+    scf
     ccf
     rl e
     rl d
@@ -123,8 +124,8 @@ skip:
     ld b, 8
 :   ld a,(de)
     ld (hl),a
-    inc h
     inc de
+    inc h
     djnz :-
     inc l
     jr z, :+
