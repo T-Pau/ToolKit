@@ -189,7 +189,7 @@ skip:
     ; skip
     add a, l
     ld l, a
-    jr c, :+
+    jr nc, :+
     ld a, 8
     add a, h
     ld h, a
