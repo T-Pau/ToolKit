@@ -101,7 +101,7 @@ class Spec:
             yaml_spec = yaml.safe_load(stream)
 
             self.directory = os.path.dirname(spec_file)
-            self.screen_width = Spec.decode(yaml_spec, "screen_width")
+            self.screen_width = Spec.decode(yaml_spec, "screen-width")
             if type(yaml_spec["charset"]) is list:
                 self.charset = []
                 for charset_spec in yaml_spec["charset"]:
