@@ -56,6 +56,20 @@ type = os.path.splitext(args.image)[1][1:]
 
 commands = []
 
+def find_file(file):
+    if not os.path.exists(file):
+        found = False
+        for directory in args.path:
+            new_file = os.path.join(directory, file)
+            if os.path.exists(new_file):
+                file = new_file
+                found = True
+                break
+        if not found:
+            raise RuntimeError(f"can't find {file}")
+    return file
+
+
 header = True
 with open(args.filelist, "r") as file:
     for line in file:
@@ -64,23 +78,18 @@ with open(args.filelist, "r") as file:
             commands.append(f"format \"{line}\" {type} {output.get_filename()}")
             header = False
         else:
-            sep = line.find(">")
-            if sep == -1:
-                raise RuntimeError(f"invalid line '{line}'")
-            file = line[:sep].strip()
-            name = line[sep+1:].strip()
-            if not os.path.exists(file):
-                found = False
-                for directory in args.path:
-                    new_file = os.path.join(directory, file)
-                    if os.path.exists(new_file):
-                        file = new_file
-                        found = True
-                        break
-                if not found:
-                    raise RuntimeError(f"can't find {file}")
-            dependencies.add(file)
-            commands.append(f"write \"{file}\" \"{name}\"")
+            if line.startswith("c128-boot "):
+                file = find_file(line[9:].strip())
+                dependencies.add(file)
+                commands.append(f"bwrite \"{file}\" 1 0")
+            else:
+                sep = line.find(">")
+                if sep == -1:
+                    raise RuntimeError(f"invalid line '{line}'")
+                file = find_file(line[:sep].strip())
+                name = line[sep+1:].strip()
+                dependencies.add(file)
+                commands.append(f"write \"{file}\" \"{name}\"")
 
 c1541 = Command.Command("c1541", [], commands)
 c1541.run()
