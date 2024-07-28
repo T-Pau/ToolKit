@@ -113,6 +113,7 @@ lines_per_frame .reserve 1
 }
 
 .public init_irq {
+    php
     sei
     .if .defined(USE_VICII) {
         ; disable cia 1 interrupts
@@ -163,13 +164,14 @@ lines_per_frame .reserve 1
     sta IRQ_VECTOR
     lda #>irq_main
     sta IRQ_VECTOR + 1
-    cli
+    plp
     rts
 }
 
 
 ; Restores Kernal IRQ routine.
 .public restore_irq {
+    php
     sei
     .if .defined(USE_VICII) {
         ; enable cia 1 interrupts
@@ -184,11 +186,12 @@ lines_per_frame .reserve 1
     sta IRQ_VECTOR
     lda kernal_irq + 1
     sta IRQ_VECTOR + 1
-    cli
+    plp
     rts
 }
 
 .public set_irq_table {
+    php
     sei
     stx table
     sty table + 1
@@ -196,7 +199,7 @@ lines_per_frame .reserve 1
     lda #0
     sta irq_index
     jsr setup_next_irq
-    cli
+    plp
     rts
 }
 
