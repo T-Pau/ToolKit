@@ -82,6 +82,8 @@ with open(args.filelist, "r") as file:
                 file = find_file(line[9:].strip())
                 dependencies.add(file)
                 commands.append(f"bwrite \"{file}\" 1 0")
+            elif line.startswith("bpoke "):
+                commands.append(line)
             else:
                 sep = line.find(">")
                 if sep == -1:
@@ -95,7 +97,7 @@ c1541 = Command.Command("c1541", [], commands)
 c1541.run()
 
 if c1541.exit_code != 0:
-    print(c1541.stderr)
+    print("\n".join(c1541.stderr))
     raise RuntimeError(f"creating disk image failed")
 
 output.close()
