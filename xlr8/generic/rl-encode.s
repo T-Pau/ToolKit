@@ -30,7 +30,7 @@
 
 .public .macro rl_encode length, byte {
     .if length > 63 {
-        .repeat i, length / 63 {
+        .repeat ii, length / 63 {
             .data RL_RUN + 63, byte:1
         }
     }
@@ -40,7 +40,7 @@
 
 .public .macro rl_skip length {
     .if length > 63 {
-        .repeat i, length / 63 {
+        .repeat ii, length / 63 {
             .data RL_SKIP + 63
         }
     }
