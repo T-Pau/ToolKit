@@ -1,4 +1,5 @@
 import argparse
+import enum
 import os
 import sys
 
@@ -6,27 +7,62 @@ import AssemblerOutput
 import AtomicOutput
 import Dependencies
 
+class Option(enum.Enum):
+    name = enum.auto()
+    alignment = enum.auto()
+    assembler_output = enum.auto()
+    section = enum.auto()
+    runlength_encode = enum.auto()
+    include_directories = enum.auto()
+
+    # collections
+    assembler = enum.auto()
+    symbol = enum.auto()
+
+collection_options = {
+    Option.assembler: {Option.section},
+    Option.symbol: {Option.assembler, Option.name, Option.alignment}
+}
+
 class Options:
-    def __init__(self, assembler_output=False, runlength_encode=False, symbol_name=False) -> None:
-        self.assembler_output = assembler_output
-        self.runlength_encode = runlength_encode
-        self.symbol_name = symbol_name
+    def __init__(self, *args) -> None:
+        self.options = set()
+        # I have NO idea why I have to iterate this twice.
+        for options in args:
+            for option in options:
+                self.add(option)
+
+    def add(self, option):
+        if option in collection_options:
+            for sub_option in collection_options[option]:
+                self.add(sub_option)
+        else:
+            self.options.add(option)
+        
+    def is_set(self, option):
+        return option in self.options
 
 class Script:
     # Public API
 
-    def __init__(self, description, options = Options()) -> None:
-        self.options = options
+    def __init__(self, description, *options) -> None:
+        self.options = Options(options)
         self.arg_parser = argparse.ArgumentParser(description=description)
         self.arg_parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
         self.arg_parser.add_argument("-o", metavar="FILE", dest="output_filename", help="write output to FILE")
         self.output = AtomicOutput.AtomicOutput()
         self.dependencies = None
 
-        if self.options.runlength_encode:
-            self.arg_parser.add_argument("-r", dest="runlength", action="store_true", help="runlength encode data")
-        if self.options.symbol_name:
-            self.arg_parser.add_argument("-n", metavar="NAME", dest="symbol_name", help="define symbol NAME")
+        if self.options.is_set(Option.alignment):
+            self.arg_parser.add_argument("-a", "--alignment", metavar="ALIGNMENT", dest="alignment", help="align to ALIGNMENT")
+        if self.options.is_set(Option.include_directories):
+            self.arg_parser.add_argument("-I", metavar="DIRECTORY", dest="include_directories", default=[], action="append", help="search for files in DIRECTORY")
+        if self.options.is_set(Option.name):
+            self.arg_parser.add_argument("-n", "--name", metavar="NAME", dest="symbol_name", help="define symbol NAME")
+        if self.options.is_set(Option.runlength_encode):
+            self.arg_parser.add_argument("-r", "--runlength", dest="runlength", action="store_true", help="runlength encode data")
+        if self.options.is_set(Option.section):
+            self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", help="put in SECTION")
 
         self.assembler = None
 
@@ -47,11 +83,31 @@ class Script:
 
 
     # Subclass API
+    # Functions called by subclass.
 
     # Add FILE as dependency.
     def add_dependency(self, file):
         self.dependencies.add(file)
     
+    # Find FILE.
+    def find_file(self, file, optional=False):
+        if not os.path.exists(file):
+            found = False
+            for directory in [os.path.dirname(self.input_filename())] + self.args.include_directories:
+                new_file = os.path.join(directory, file)
+                if os.path.exists(new_file):
+                    file = new_file
+                    found = True
+                    break
+            if not found:
+                if optional:
+                    return None
+                else:
+                    raise RuntimeError(f"can't find {file}")
+        self.add_dependency(file)
+        return file
+
+
     # Get filename of final output file.
     def output_filename(self):
         if self.args.output_filename is not None:
@@ -64,12 +120,12 @@ class Script:
     
     # Get filename of temporary output file.
     def output_file_name(self):
-        return self.output.get_file_name()
+        return self.output.get_filename()
 
     # Get name of assembler symbol.
     def symbol_name(self):
-        if self.args.symbol_name is not None:
-            return self.args.symbol_name
+        if self.args.name is not None:
+            return self.args.name
         # TODO: remove invalid characters
         return os.path.splitext(self.input_filename())[0].replace("-", "_")
 
@@ -107,7 +163,7 @@ class Script:
 
     # Set up and call actual processing.
     def execute(self):
-        if self.options.assembler_output:
+        if self.options.is_set(Option.assembler_output):
             self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.input_filename())
             self.assembler.data_section()

@@ -24,7 +24,7 @@ rule convert-sprites
     depfile = $out.d
 
 rule create-disk
-    command = {{$bin_directory/create-disk}} -M $depfile $flags $out $in
+    command = {{$bin_directory/create-disk}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
 rule convert-image
