@@ -44,9 +44,6 @@ import RunlengthEncoder
 import Screens
 import Script
 
-charsets = []
-assembler = None
-
 class Inverted(enum.Enum):
     NONE = "none"
     CREATE = "create"
@@ -114,7 +111,7 @@ class Spec:
 
 class ConvertCharacters(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Convert images to charset and screens.", Script.Option.assembler)
+        super().__init__("Convert images to charset and screens.", Script.Option.assembler, Script.Option.include_directories)
         self.arg_parser.add_argument("specs")
         self.arg_parser.add_argument("-v", dest="verbose", action="store_true", help="print debug output")
         self.charsets = []
@@ -143,25 +140,25 @@ class ConvertCharacters(Script.Script):
             charset = Charset.Charset(charset_spec.count, bytes((char_width * char_height) // 8), True)
             for index, value in charset_spec.predefined.items():
                 charset.add_with_index(bytes.fromhex(value), index)
-            charsets.append(charset)
+            self.charsets.append(charset)
 
         images = []
 
         for image_spec in specs.images:
-            dependencies.add(image_spec.file)
-            image = CharacterImage.CharacterImage(image_spec.file, char_width, char_height,
+            filename = self.find_file(image_spec.file)
+            image = CharacterImage.CharacterImage(filename, char_width, char_height,
                                                 {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0}, pixel_size=image_spec.pixel_size)
             images.append(image)
-            if image_spec.type in processors:
-                processors[image_spec.type](image, image_spec, True)
+            if image_spec.type in self.processors:
+                self.processors[image_spec.type](self, image, image_spec, True)
             else:
                 raise RuntimeError(f"unknown type '{image_spec.type}'")
 
         for image_spec, image in zip(specs.images, images):
-            processors[image_spec.type](image, image_spec, False)
+            self.processors[image_spec.type](self, image, image_spec, False)
 
-        for index in range(0, len(charsets)):
-            charset = charsets[index]
+        for index in range(0, len(self.charsets)):
+            charset = self.charsets[index]
             charset_spec = specs.charset[index]
 
             charset_bytes = charset.get_bytes()
@@ -169,12 +166,12 @@ class ConvertCharacters(Script.Script):
                 runlength = RunlengthEncoder.RunlengthEncoder()
                 runlength.add_bytes(charset_bytes)
                 charset_bytes = runlength.end()
-            self.assembler.global_bytes(charset_spec.name, charset_bytes)
+            self.assembler.bytes_object(charset_spec.name, charset_bytes)
 
             self.assembler.comment(f"{charset.character_count} of {charset.size} characters used")
 
 
-    def process_charset(image, image_spec, prerun):
+    def process_charset(self, image, image_spec, prerun):
         if not prerun:
             return
 
@@ -201,7 +198,7 @@ class ConvertCharacters(Script.Script):
                     charset.add_with_index(value, index + charset.size // 2)
 
 
-    def process_image(image, image_spec, prerun):
+    def process_image(self, image, image_spec, prerun):
         image_width = image.width
         image_height = image.height
         inverted_x_offset = 0
@@ -236,7 +233,7 @@ class ConvertCharacters(Script.Script):
                         chars = b""
                 for yy in range(height):
                     if type(image_spec.charset) is dict and yy in image_spec.charset:
-                        charset = charsets[image_spec.charset[yy]]
+                        charset = self.charsets[image_spec.charset[yy]]
 
                     if yy > 0 and image_spec.screen_width is not None:
                         if not prerun and image_spec.rl_encode:
@@ -283,8 +280,8 @@ class ConvertCharacters(Script.Script):
 
         if not prerun:
             if image_spec.screen_file is not None:
-                screens = Screens.Screens(dependencies, images=list(map(lambda part: {"width": width, "height": height, "data": part}, parts)), assembler_output=self.assembler)
-                if not screens.convert(self.find_file(image_spec.screen_file), output.get_file()):
+                screens = Screens.Screens(self.dependencies, images=list(map(lambda part: {"width": width, "height": height, "data": part}, parts)), assembler_output=self.assembler)
+                if not screens.convert(self.find_file(image_spec.screen_file), self.output.get_file()):
                     raise RuntimeError("")
             else:
                 if count == 1:

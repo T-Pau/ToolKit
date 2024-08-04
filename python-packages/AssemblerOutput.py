@@ -105,15 +105,15 @@ class AssemblerOutput:
 
     def parts(self, name, parts, include_count=True):
         if include_count:
-            self.global_symbol(f"{name}_count")
+            self.begin_object(f"{name}_count")
             self.byte(len(parts))
             self.end_object()
-        self.global_symbol(name)
+        self.begin_object(name)
         for i in range(len(parts)):
             self.word(f"{name}_{i}")
         self.end_object()
         for i in range(len(parts)):
-            self.local_symbol(f"{name}_{i}")
+            self.begin_object(f"{name}_{i}")
             self.bytes(parts[i])
             self.end_object()
 

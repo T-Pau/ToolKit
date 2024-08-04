@@ -1,22 +1,22 @@
 bin_directory = $top_source_directory/Toolkit/bin
 
 rule compress-screen
-    command = {{$bin_directory/compress-screen}} $in $out
+    command = {{$bin_directory/compress-screen}} -o $out $in
 
 rule convert-bitmap
     command = {{$bin_directory/convert-bitmap}} -M $depfile $flags -n $name -o $out $in
     depfile = $out.d
 
 rule convert-charset
-    command = {{$bin_directory/convert-charset}} -M $depfile $flags $in $out $name
+    command = {{$bin_directory/convert-charset}} -M $depfile $flags -n $name -o $out $in
     depfile = $out.d
 
 rule convert-characters
-    command = {{$bin_directory/convert-characters}} -M $depfile $flags $in $out
+    command = {{$bin_directory/convert-characters}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
 rule convert-screens
-    command = {{$bin_directory/convert-screens}} -M $depfile $flags $in $out
+    command = {{$bin_directory/convert-screens}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
 rule convert-sprites
@@ -34,4 +34,3 @@ rule convert-image
 rule encode-colors
     command = {{$bin_directory/encode-colors}} -M $depfile $flags -o $out $in
     depfile = $out.d
-

@@ -432,9 +432,9 @@ class Screens:
         else:
             output = AssemblerOutput.AssemblerOutput(output_file)
             output.header(self.input_file)
-        output.data_section()
+            output.section("data")
         if self.single_screen:
-            output.global_symbol(self.name)
+            output.begin_object(self.name)
             output.bytes(self.compressed_screens[0])
             output.end_object()
         else:

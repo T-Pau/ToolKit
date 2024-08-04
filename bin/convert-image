@@ -78,7 +78,7 @@ class ConvertImage(Script.Script):
             encoder = RunlengthEncoder.RunlengthEncoder()
             encoder.add_bytes(binary)
             binary = encoder.end()
-        self.assembler.global_bytes(self.symbol_name(), binary)
+        self.assembler.bytes_object(self.symbol_name(), binary)
 
     def convert_spectrum(self):
         image = BlockImage.BlockImage(self.input_filename(), 8, 8, palette_spectrum)

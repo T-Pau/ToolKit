@@ -15,7 +15,7 @@ def write_parts(output_file_name, parts, name):
     with open(output_file_name, "w") as output_file:
         output = AssemblerOutput.AssemblerOutput(output_file)
         output.header(input_file_name)
-        output.data_section()
+        output.section("data")
         output.parts(name, parts)
 
 

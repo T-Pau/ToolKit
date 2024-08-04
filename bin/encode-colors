@@ -90,7 +90,7 @@ class Object:
             assembler.pre_end()
     
     def output_data(self, index, assembler, runlength):
-        assembler.local_symbol(self.name)
+        assembler.begin_object(self.name)
         data = []
         for y in range(self.height):
             for x in range(self.width):
