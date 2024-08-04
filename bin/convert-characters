@@ -37,14 +37,12 @@ import argparse
 import enum
 import yaml
 
-import AssemblerOutput
-import AtomicOutput
 import CharacterImage
 import Charset
-import Dependencies
 import PaletteImage
 import RunlengthEncoder
 import Screens
+import Script
 
 charsets = []
 assembler = None
@@ -97,7 +95,7 @@ class Spec:
             self.pixel_size = PaletteImage.PixelSize(pixel_size_x, pixel_size_y)
 
     def __init__(self, spec_file):
-        with open(args.specs, "r") as stream:
+        with open(spec_file, "r") as stream:
             yaml_spec = yaml.safe_load(stream)
 
             self.directory = os.path.dirname(spec_file)
@@ -114,204 +112,190 @@ class Spec:
                 self.images = []
 
 
-output = AtomicOutput.AtomicOutput()
+class ConvertCharacters(Script.Script):
+    def __init__(self) -> None:
+        super().__init__("Convert images to charset and screens.", Script.Option.assembler)
+        self.arg_parser.add_argument("specs")
+        self.arg_parser.add_argument("-v", dest="verbose", action="store_true", help="print debug output")
+        self.charsets = []
+
+    # Get filename of input file.
+    def input_filename(self):
+        return self.args.specs
+
+    def execute_sub(self):
+        try:
+            specs = Spec(self.input_filename())
+        except yaml.YAMLError as exc:
+            raise RuntimeError(f"can't load specs from '{args.specs}: {exc}")
+
+        char_width = None
+        char_height = None
+
+        for charset_spec in specs.charset:
+            if char_width is not None and charset_spec.width != char_width:
+                raise RuntimeError("different character set widths not supported")
+            if char_height is not None and charset_spec.height != char_height:
+                raise RuntimeError("different character set heights not supported")
+            char_width = charset_spec.width
+            char_height = charset_spec.height
+            
+            charset = Charset.Charset(charset_spec.count, bytes((char_width * char_height) // 8), True)
+            for index, value in charset_spec.predefined.items():
+                charset.add_with_index(bytes.fromhex(value), index)
+            charsets.append(charset)
+
+        images = []
+
+        for image_spec in specs.images:
+            dependencies.add(image_spec.file)
+            image = CharacterImage.CharacterImage(image_spec.file, char_width, char_height,
+                                                {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0}, pixel_size=image_spec.pixel_size)
+            images.append(image)
+            if image_spec.type in processors:
+                processors[image_spec.type](image, image_spec, True)
+            else:
+                raise RuntimeError(f"unknown type '{image_spec.type}'")
+
+        for image_spec, image in zip(specs.images, images):
+            processors[image_spec.type](image, image_spec, False)
+
+        for index in range(0, len(charsets)):
+            charset = charsets[index]
+            charset_spec = specs.charset[index]
+
+            charset_bytes = charset.get_bytes()
+            if charset_spec.rl_encode:
+                runlength = RunlengthEncoder.RunlengthEncoder()
+                runlength.add_bytes(charset_bytes)
+                charset_bytes = runlength.end()
+            self.assembler.global_bytes(charset_spec.name, charset_bytes)
+
+            self.assembler.comment(f"{charset.character_count} of {charset.size} characters used")
 
 
-def process_charset(image, image_spec, prerun):
-    if not prerun:
-        return
+    def process_charset(image, image_spec, prerun):
+        if not prerun:
+            return
 
-    if image_spec.charset >= len(charsets):
-        raise RuntimeError(f"invalid charset {image_spec.charset}, only {len(charsets)} defined")
-    charset = charsets[image_spec.charset]
+        if image_spec.charset >= len(self.charsets):
+            raise RuntimeError(f"invalid charset {image_spec.charset}, only {len(self.charsets)} defined")
+        charset = self.charsets[image_spec.charset]
 
-    count = image.count
-    if image_spec.inverted == Inverted.PRESENT:
-        count //= 2
-
-    for index in range(count):
-        value = image.get(index)
-        if value is not None:
-            charset.add_with_index(image.get(index), index + image_spec.offset)
-            if image_spec.inverted == Inverted.CREATE:
-                value2 = b""
-                for b in value:
-                    value2 += (b ^ 255).to_bytes(1, byteorder="little")
-                charset.add_with_index(value2, index + charset.size // 2 + image_spec.offset)
+        count = image.count
         if image_spec.inverted == Inverted.PRESENT:
-            value = image.get(index + count)
+            count //= 2
+
+        for index in range(count):
+            value = image.get(index)
             if value is not None:
-                charset.add_with_index(value, index + charset.size // 2)
+                charset.add_with_index(image.get(index), index + image_spec.offset)
+                if image_spec.inverted == Inverted.CREATE:
+                    value2 = b""
+                    for b in value:
+                        value2 += (b ^ 255).to_bytes(1, byteorder="little")
+                    charset.add_with_index(value2, index + charset.size // 2 + image_spec.offset)
+            if image_spec.inverted == Inverted.PRESENT:
+                value = image.get(index + count)
+                if value is not None:
+                    charset.add_with_index(value, index + charset.size // 2)
 
 
-def process_image(image, image_spec, prerun):
-    image_width = image.width
-    image_height = image.height
-    inverted_x_offset = 0
-    inverted_y_offset = 0
-    if image_spec.inverted == Inverted.PRESENT or image_spec.inverted == Inverted.IF_DIFFERENT:
-        if image_spec.slice_y > 1:
-            image_width //= 2
-            inverted_x_offset = image_width
-        else:
-            image_height //= 2
-            inverted_y_offset = image_height
+    def process_image(image, image_spec, prerun):
+        image_width = image.width
+        image_height = image.height
+        inverted_x_offset = 0
+        inverted_y_offset = 0
+        if image_spec.inverted == Inverted.PRESENT or image_spec.inverted == Inverted.IF_DIFFERENT:
+            if image_spec.slice_y > 1:
+                image_width //= 2
+                inverted_x_offset = image_width
+            else:
+                image_height //= 2
+                inverted_y_offset = image_height
 
-    if image_width % image_spec.slice_x != 0:
-        output.abort(f"image width {image_width} not multiple of slice-x {image_spec.slice_x}")
-    if image_height % image_spec.slice_y != 0:
-        output.abort(f"image height {image_height} not multiple of slice-y {image_spec.slice_y}")
-    width = image_width // image_spec.slice_x
-    height = image_height // image_spec.slice_y
-    count = image_spec.slice_x * image_spec.slice_y
+        if image_width % image_spec.slice_x != 0:
+            raise RuntimeError(f"image width {image_width} not multiple of slice-x {image_spec.slice_x}")
+        if image_height % image_spec.slice_y != 0:
+            raise RuntimeError(f"image height {image_height} not multiple of slice-y {image_spec.slice_y}")
+        width = image_width // image_spec.slice_x
+        height = image_height // image_spec.slice_y
+        count = image_spec.slice_x * image_spec.slice_y
 
-    parts = []
+        parts = []
 
-    if type(image_spec.charset) is not dict:
-        charset = charsets[image_spec.charset]
+        if type(image_spec.charset) is not dict:
+            charset = self.charsets[image_spec.charset]
 
-    for y in range(image_spec.slice_y):
-        for x in range(image_spec.slice_x):
-            if not prerun:
-                if image_spec.rl_encode:
-                    runlength = RunlengthEncoder.RunlengthEncoder(image_spec.trim)
-                else:
-                    chars = b""
-            for yy in range(height):
-                if type(image_spec.charset) is dict and yy in image_spec.charset:
-                    charset = charsets[image_spec.charset[yy]]
-
-                if yy > 0 and image_spec.screen_width is not None:
-                    if not prerun and image_spec.rl_encode:
-                        runlength.skip(image_spec.screen_width - width)
-                for xx in range(width):
-                    value = image.get_xy(x * width + xx, y * height + yy)
-                    value2 = None
-                    if image_spec.inverted == Inverted.PRESENT or image_spec.inverted == Inverted.IF_DIFFERENT:
-                        value2 = image.get_xy(x * width + xx + inverted_x_offset, y * height + yy + inverted_y_offset)
-                        if image_spec.inverted == Inverted.IF_DIFFERENT and value == value2:
-                            value2 = None
-                    if value is None:
-                        if not prerun:
-                            if image_spec.rl_encode:
-                                runlength.skip(1)
-                            else:
-                                raise RuntimeError(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: can't encode hole")
+        for y in range(image_spec.slice_y):
+            for x in range(image_spec.slice_x):
+                if not prerun:
+                    if image_spec.rl_encode:
+                        runlength = RunlengthEncoder.RunlengthEncoder(image_spec.trim)
                     else:
-                        try:
-                            if value2 is None:
-                                if not prerun:
-                                    count_before = charset.character_count
-                                    char = charset.add(value)
-                                    if args.verbose and count_before != charset.character_count:
-                                        print(f"{y}.{xx}/{yy}: {value.hex()}  -> {hex(char)}")
-                            else:
-                                count_before = charset.character_count
-                                char = charset.add_pair(value, value2)
-                                if args.verbose and count_before != charset.character_count:
-                                    print(f"{y}.{xx}/{yy}: {value.hex()} {value2.hex()} -> {hex(char)}")
+                        chars = b""
+                for yy in range(height):
+                    if type(image_spec.charset) is dict and yy in image_spec.charset:
+                        charset = charsets[image_spec.charset[yy]]
+
+                    if yy > 0 and image_spec.screen_width is not None:
+                        if not prerun and image_spec.rl_encode:
+                            runlength.skip(image_spec.screen_width - width)
+                    for xx in range(width):
+                        value = image.get_xy(x * width + xx, y * height + yy)
+                        value2 = None
+                        if image_spec.inverted == Inverted.PRESENT or image_spec.inverted == Inverted.IF_DIFFERENT:
+                            value2 = image.get_xy(x * width + xx + inverted_x_offset, y * height + yy + inverted_y_offset)
+                            if image_spec.inverted == Inverted.IF_DIFFERENT and value == value2:
+                                value2 = None
+                        if value is None:
                             if not prerun:
                                 if image_spec.rl_encode:
-                                    runlength.add(char)
+                                    runlength.skip(1)
                                 else:
-                                    chars += char.to_bytes(1, byteorder="little")
-                        except Exception as ex:
-                            print(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: {ex}")
-                            # TODO: record error
-                            
-            if not prerun:
-                if image_spec.rl_encode:
-                    parts.append(runlength.end())
-                else:
-                    parts.append(chars)
+                                    raise RuntimeError(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: can't encode hole")
+                        else:
+                            try:
+                                if value2 is None:
+                                    if not prerun:
+                                        count_before = charset.character_count
+                                        char = charset.add(value)
+                                        if self.args.verbose and count_before != charset.character_count:
+                                            print(f"{y}.{xx}/{yy}: {value.hex()}  -> {hex(char)}")
+                                else:
+                                    count_before = charset.character_count
+                                    char = charset.add_pair(value, value2)
+                                    if self.args.verbose and count_before != charset.character_count:
+                                        print(f"{y}.{xx}/{yy}: {value.hex()} {value2.hex()} -> {hex(char)}")
+                                if not prerun:
+                                    if image_spec.rl_encode:
+                                        runlength.add(char)
+                                    else:
+                                        chars += char.to_bytes(1, byteorder="little")
+                            except Exception as ex:
+                                self.error(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: {ex}")
+                                
+                if not prerun:
+                    if image_spec.rl_encode:
+                        parts.append(runlength.end())
+                    else:
+                        parts.append(chars)
 
-    if not prerun:
-        if image_spec.screen_file is not None:
-            screens = Screens.Screens(dependencies, images=list(map(lambda part: {"width": width, "height": height, "data": part}, parts)), assembler_output=assembler)
-            if not screens.convert(os.path.join(os.path.dirname(args.specs), image_spec.screen_file), output.get_file()):
-                raise RuntimeError("")
-        else:
-            if count == 1:
-                assembler.global_bytes(image_spec.name, parts[0])
+        if not prerun:
+            if image_spec.screen_file is not None:
+                screens = Screens.Screens(dependencies, images=list(map(lambda part: {"width": width, "height": height, "data": part}, parts)), assembler_output=self.assembler)
+                if not screens.convert(self.find_file(image_spec.screen_file), output.get_file()):
+                    raise RuntimeError("")
             else:
-                assembler.data_section()
-                assembler.parts(image_spec.name, parts, image_spec.include_count)
+                if count == 1:
+                    self.assembler.bytes_object(image_spec.name, parts[0])
+                else:
+                    self.assembler.parts(image_spec.name, parts, image_spec.include_count)
 
 
-processors = {
-    "charset": process_charset,
-    "image": process_image
-}
+    processors = {
+        "charset": process_charset,
+        "image": process_image
+    }
 
-parser = argparse.ArgumentParser(description='Convert images to charset and screens.')
-
-parser.add_argument("specs")
-parser.add_argument("output")
-parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
-parser.add_argument("-v", dest="verbose", action="store_true", help="print debug output")
-
-args = parser.parse_args()
-
-output.set_filename(args.output)
-dependencies = Dependencies.Dependencies(args.depfile, args.output)
-dependencies.add(args.specs)
-
-
-def main():
-    global assembler
-    global charsets
-
-    try:
-        specs = Spec(args.specs)
-    except yaml.YAMLError as exc:
-        raise RuntimeError(f"can't load specs from '{args.specs}: {exc}")
-
-    assembler = AssemblerOutput.AssemblerOutput(output.get_file())
-    char_width = None
-    char_height = None
-    for charset_spec in specs.charset:
-        if char_width is not None and charset_spec.width != char_width:
-            raise RuntimeError("different character set widths not supported")
-        if char_height is not None and charset_spec.height != char_height:
-            raise RuntimeError("different character set heights not supported")
-        char_width = charset_spec.width
-        char_height = charset_spec.height
-        
-        charset = Charset.Charset(charset_spec.count, bytes((char_width * char_height) // 8), True)
-        for index, value in charset_spec.predefined.items():
-            charset.add_with_index(bytes.fromhex(value), index)
-        charsets.append(charset)
-
-    assembler.header(args.specs)
-
-    images = []
-
-    for image_spec in specs.images:
-        dependencies.add(image_spec.file)
-        image = CharacterImage.CharacterImage(image_spec.file, char_width, char_height,
-                                            {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0}, pixel_size=image_spec.pixel_size)
-        images.append(image)
-        if image_spec.type in processors:
-            processors[image_spec.type](image, image_spec, True)
-        else:
-            output.abort(f"unknown type '{image_spec.type}'")
-
-    for image_spec, image in zip(specs.images, images):
-        processors[image_spec.type](image, image_spec, False)
-
-    for index in range(0, len(charsets)):
-        charset = charsets[index]
-        charset_spec = specs.charset[index]
-
-        charset_bytes = charset.get_bytes()
-        if charset_spec.rl_encode:
-            runlength = RunlengthEncoder.RunlengthEncoder()
-            runlength.add_bytes(charset_bytes)
-            charset_bytes = runlength.end()
-        assembler.global_bytes(charset_spec.name, charset_bytes)
-
-        assembler.comment(f"{charset.character_count} of {charset.size} characters used")
-
-    dependencies.write()
-
-output.run(main)
+ConvertCharacters().run()

@@ -4,7 +4,7 @@ rule compress-screen
     command = {{$bin_directory/compress-screen}} $in $out
 
 rule convert-bitmap
-    command = {{$bin_directory/convert-bitmap}} -M $depfile $flags $in $out $name
+    command = {{$bin_directory/convert-bitmap}} -M $depfile $flags -n $name -o $out $in
     depfile = $out.d
 
 rule convert-charset
@@ -20,7 +20,7 @@ rule convert-screens
     depfile = $out.d
 
 rule convert-sprites
-    command = {{$bin_directory/convert-sprites}} -M $depfile $flags $in $out $name
+    command = {{$bin_directory/convert-sprites}} -M $depfile $flags -o $out -n $name $in
     depfile = $out.d
 
 rule create-disk

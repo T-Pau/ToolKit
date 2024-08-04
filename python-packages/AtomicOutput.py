@@ -9,6 +9,7 @@ class AtomicOutput:
         self.only_if_changed = False
         self.temp_name = None
         self.file = None
+        self.ok = True
 
     def set_filename(self, filename):
         if self.file is not None:
@@ -51,15 +52,21 @@ class AtomicOutput:
         if self.temp_name:
             os.remove(self.temp_name)
     
+    def error(self, message):
+        print(message, file=sys.stderr)
+        self.ok = False
+
     def run(self, code):
         try:
             code()
+            if not self.ok:
+                raise RuntimeError("")
             self.close()
             return True
         except Exception as ex:
             if "TOOLKIT_DEBUG" in os.environ:
                 traceback.print_exception(ex)
-            else:
+            elif str(ex) != "":
                 print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             self.discard()
             return False

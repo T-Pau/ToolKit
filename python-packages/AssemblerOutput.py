@@ -34,6 +34,20 @@ class AssemblerOutput:
     def __init__(self, file):
         self.file = file
         self.current_section = None
+        self.current_visibility = "private"
+
+    def begin_object(self, name, section=None, visibility=None, alignment=None):
+        if section is not None:
+            self.section(section)
+        self.empty_line()
+        alignment_string = ""
+        visibility_string = ""
+        if visibility is not None and visibility != self.current_visibility:
+            visibility_string = f".{visibility} "
+        if alignment is not None:
+            alignment_string = f" .align {alignment}"
+        print(f"{visibility_string}{name}{alignment_string} {{", file=self.file)
+
     def byte(self, value):
         print(f"    .data {value}", file=self.file)
 
@@ -52,72 +66,13 @@ class AssemblerOutput:
         if i > 0:
             self.file.write("\n")
 
+    def bytes_object(self, name, bytes_array, section="data", visibility=None, alignment=None):
+        self.begin_object(name, section=section, alignment=alignment)
+        self.bytes(bytes_array)
+        self.end_object()
+
     def comment(self, comment):
         print(f"; {comment}", file=self.file)
-
-    def data_section(self):
-        self.section("data")
-
-    def pre_if(self, predicate):
-        print(f".pre_if {predicate}", file=self.file)
-
-    def pre_else(self):
-        print(f".pre_else", file=self.file)
-
-    def pre_end(self):
-        print(f".pre_end", file=self.file)
-
-    def section(self, section):
-        if self.current_section != section:
-            self.empty_line()
-            print(f".section {section}", file=self.file)
-            self.current_section = section
-
-    def empty_line(self):
-        print("", file=self.file)
-
-    def global_symbol(self, name, section=None, align=None):
-        if section is not None:
-            self.section(section)
-        self.empty_line()
-        align_string = ""
-        if align is not None:
-            align_string = f" .align {align}"
-        print(f".public {name}{align_string} {{", file=self.file)
-
-    def header(self, input_file):
-        self.comment(f"This file is automatically created by {sys.argv[0]} from {input_file}.")
-        self.comment(f"Do not edit.")
-        self.empty_line()
-
-    def local_symbol(self, name, section=None):
-        if section is not None:
-            self.section(section)
-        self.empty_line()
-        print(f"{name} {{", file=self.file)
-
-    def end_object(self):
-        print("}", file=self.file)
-
-    def parts(self, name, parts, include_count=True):
-        if include_count:
-            self.global_symbol(f"{name}_count")
-            self.byte(len(parts))
-            self.end_object()
-        self.global_symbol(name)
-        for i in range(len(parts)):
-            self.word(f"{name}_{i}")
-        self.end_object()
-        for i in range(len(parts)):
-            self.local_symbol(f"{name}_{i}")
-            self.bytes(parts[i])
-            self.end_object()
-
-    def string(self, value, encoding=None):
-        print(f"    .data \"{value}\"", end="", file=self.file)
-        if encoding is not None:
-            print(f":{encoding}", end="", file=self.file)
-        print("", file=self.file)
 
     def data(self, value, encoding=None, line_length=16):
         if type(value) != list:
@@ -137,11 +92,57 @@ class AssemblerOutput:
             index += 1
         print("", file=self.file)
 
+    def empty_line(self):
+        print("", file=self.file)
+
+    def end_object(self):
+        print("}", file=self.file)
+
+    def header(self, input_file):
+        self.comment(f"This file is automatically created by {sys.argv[0]} from {input_file}.")
+        self.comment(f"Do not edit.")
+        self.empty_line()
+
+    def parts(self, name, parts, include_count=True):
+        if include_count:
+            self.global_symbol(f"{name}_count")
+            self.byte(len(parts))
+            self.end_object()
+        self.global_symbol(name)
+        for i in range(len(parts)):
+            self.word(f"{name}_{i}")
+        self.end_object()
+        for i in range(len(parts)):
+            self.local_symbol(f"{name}_{i}")
+            self.bytes(parts[i])
+            self.end_object()
+
+    def pre_else(self):
+        print(f".pre_else", file=self.file)
+
+    def pre_end(self):
+        print(f".pre_end", file=self.file)
+
+    def pre_if(self, predicate):
+        print(f".pre_if {predicate}", file=self.file)
+
+    def string(self, value, encoding=None):
+        print(f"    .data \"{value}\"", end="", file=self.file)
+        if encoding is not None:
+            print(f":{encoding}", end="", file=self.file)
+        print("", file=self.file)
+
+    def section(self, section):
+        if self.current_section != section:
+            self.empty_line()
+            print(f".section {section}", file=self.file)
+            self.current_section = section
+
+    def visibility(self, visibility):
+        if self.current_visibility != visibility:
+            self.empty_line()
+            print(f".visibility {visibility}", file=self.file)
+            self.current_visibility = visibility
+
     def word(self, value):
         print(f"    .data {value}:2", file=self.file)
-
-    def global_bytes(self, name, bytes_array, section = "data", align=None):
-        self.global_symbol(name, section, align)
-        self.bytes(bytes_array)
-        self.end_object()
-

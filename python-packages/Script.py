@@ -6,6 +6,7 @@ import sys
 import AssemblerOutput
 import AtomicOutput
 import Dependencies
+import RunlengthEncoder
 
 class Option(enum.Enum):
     name = enum.auto()
@@ -47,14 +48,17 @@ class Script:
 
     def __init__(self, description, *options) -> None:
         self.options = Options(options)
-        self.arg_parser = argparse.ArgumentParser(description=description)
+        self.arg_parser = argparse.ArgumentParser(description=description, allow_abbrev=False)
         self.arg_parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
         self.arg_parser.add_argument("-o", metavar="FILE", dest="output_filename", help="write output to FILE")
         self.output = AtomicOutput.AtomicOutput()
         self.dependencies = None
+        self.assembler = None
 
         if self.options.is_set(Option.alignment):
-            self.arg_parser.add_argument("-a", "--alignment", metavar="ALIGNMENT", dest="alignment", help="align to ALIGNMENT")
+            if self.natural_alignment() is not None:
+                self.arg_parser.add_argument("--align", const=self.natural_alignment(), action="store_const", dest="alignment", help=f"align to {self.natural_alignment()}")
+            self.arg_parser.add_argument("-a", "--alignment", default=None, metavar="ALIGNMENT", dest="alignment", help="align to ALIGNMENT")
         if self.options.is_set(Option.include_directories):
             self.arg_parser.add_argument("-I", metavar="DIRECTORY", dest="include_directories", default=[], action="append", help="search for files in DIRECTORY")
         if self.options.is_set(Option.name):
@@ -63,8 +67,6 @@ class Script:
             self.arg_parser.add_argument("-r", "--runlength", dest="runlength", action="store_true", help="runlength encode data")
         if self.options.is_set(Option.section):
             self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", default="data", help="put in SECTION")
-
-        self.assembler = None
 
     def run(self):
         try:
@@ -89,6 +91,10 @@ class Script:
     def add_dependency(self, file):
         self.dependencies.add(file)
     
+    # Print error.
+    def error(self, message):
+        self.output.error(message)
+
     # Find FILE.
     def find_file(self, file, optional=False):
         if not os.path.exists(file):
@@ -106,6 +112,17 @@ class Script:
                     raise RuntimeError(f"can't find {file}")
         self.add_dependency(file)
         return file
+
+    def symbol(self, binary):
+        alignment = None
+        if self.args.runlength:
+            runlength = RunlengthEncoder.RunlengthEncoder()
+            runlength.add_bytes(binary)
+            binary = runlength.end()
+        if self.args.alignment is not None:
+            alignment = int(self.args.alignment)
+
+        self.assembler.bytes_object(self.args.name, binary, section=self.args.section, alignment=alignment)
 
 
     # Get filename of final output file.
@@ -141,6 +158,10 @@ class Script:
     # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
     def default_output_extension(self):
         return "s"
+
+    # Alignment to use if --align option is given.
+    def natural_alignment(self):
+        return None
 
     # Validate arguments and other preparations. Run before output file is created.
     def prepare(self):

@@ -84,7 +84,7 @@ else:
     for index in range(0, charset.count):
         binary += charset.get(index)
 
-assembler.global_bytes(args.name, binary)
+assembler.bytes_object(args.name, binary)
 
 if args.inverted:
     if args.runlength:

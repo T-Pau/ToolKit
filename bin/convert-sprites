@@ -34,62 +34,44 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 
 import argparse
 
-import AssemblerOutput
-import AtomicOutput
 import CharacterImage
-import Dependencies
-import RunlengthEncoder
+import Script
+
+class ConvertSprites(Script.Script):
+    def __init__(self) -> None:
+        super().__init__("Convert sprite image.", Script.Option.symbol, Script.Option.runlength_encode)
+        self.arg_parser.add_argument("image")
+
+    # Get filename of input file.
+    def input_filename(self):
+        return self.args.image
+    
+    # Alignment to use if --align option is given.
+    def natural_alignment(self):
+        return 64
 
 
-parser = argparse.ArgumentParser(description='Convert sprite image.')
+    def execute_sub(self):
+        charset = CharacterImage.CharacterImage(self.input_filename(), 8, 1)
 
-parser.add_argument("image")
-parser.add_argument("output")
-parser.add_argument("name")
-parser.add_argument("-a", dest="align", action="store_true", help="align object")
-parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
-parser.add_argument("-r", dest="runlength", action="store_true", help="runlength encode sprite data")
-parser.add_argument("-s", metavar="SECTION", dest="section", help="put object in SECTION", default="data")
+        if charset.width % 3 != 0:
+            raise RuntimeError("image width not multiple of 24")
+        if charset.height % 21 != 0:
+            raise RuntimeError("image width not multiple of 21")
 
-args = parser.parse_args()
+        binary = bytearray()
 
-output = AtomicOutput.AtomicOutput()
+        num_sprites_x = charset.width // 3
+        num_sprites_y = charset.height // 21
 
-output.set_filename(args.output)
-dependencies = Dependencies.Dependencies(args.depfile, args.output)
-dependencies.add(args.image)
+        for sprite_y in range(0, num_sprites_y):
+            for sprite_x in range(0, num_sprites_x):
+                for y in range(0, 21):
+                    for x in range(0, 3):
+                        binary += charset.get_xy(x + sprite_x * 3, y + sprite_y * 21)
+                zero = 0
+                binary += zero.to_bytes(1, byteorder="little")
 
-charset = CharacterImage.CharacterImage(args.image, 8, 1)
-if charset.width % 3 != 0:
-    raise RuntimeError("image width not multiple of 24")
-if charset.height % 21 != 0:
-    raise RuntimeError("image width not multiple of 21")
+        self.symbol(binary)
 
-assembler = AssemblerOutput.AssemblerOutput(output.get_file())
-
-assembler.header(args.image)
-
-binary = bytearray()
-
-num_sprites_x = charset.width // 3
-num_sprites_y = charset.height // 21
-
-for sprite_y in range(0, num_sprites_y):
-    for sprite_x in range(0, num_sprites_x):
-        for y in range(0, 21):
-            for x in range(0, 3):
-                binary += charset.get_xy(x + sprite_x * 3, y + sprite_y * 21)
-        zero = 0
-        binary += zero.to_bytes(1, byteorder="little")
-
-align = None
-if args.align:
-    align = 64
-if args.runlength:
-    encoder = RunlengthEncoder.RunlengthEncoder()
-    encoder.add_bytes(binary)
-    binary = encoder.end()
-assembler.global_bytes(args.name, binary, args.section, align)
-
-output.close()
-dependencies.write()
+ConvertSprites().run()
