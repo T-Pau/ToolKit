@@ -62,7 +62,7 @@ class Script:
         if self.options.is_set(Option.runlength_encode):
             self.arg_parser.add_argument("-r", "--runlength", dest="runlength", action="store_true", help="runlength encode data")
         if self.options.is_set(Option.section):
-            self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", help="put in SECTION")
+            self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", default="data", help="put in SECTION")
 
         self.assembler = None
 
@@ -166,6 +166,6 @@ class Script:
         if self.options.is_set(Option.assembler_output):
             self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.input_filename())
-            self.assembler.data_section()
+            self.assembler.section(self.args.section)
         self.execute_sub()
         self.dependencies.write()
