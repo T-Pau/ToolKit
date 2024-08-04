@@ -106,7 +106,7 @@ class Object:
 
 class EncodeColor(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Encode colors.", Script.Options(runlength_encode = True, assembler_output = True))
+        super().__init__("Encode colors.", Script.Option.runlength_encode, Script.Option.assembler)
         self.arg_parser.add_argument("file")        
 
     def execute_sub(self):

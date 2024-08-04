@@ -59,7 +59,7 @@ palette_spectrum = {
 
 class ConvertImage(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Convert image to native format.", Script.Options(runlength_encode = True, assembler_output = True, symbol_name = True))
+        super().__init__("Convert image to native format.", Script.Option.runlength_encode, Script.Option.symbol)
         self.arg_parser.add_argument("image")
         self.arg_parser.add_argument("-F", metavar="FORMAT", dest="format", help="image format")
         self.format = None

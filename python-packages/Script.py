@@ -20,7 +20,7 @@ class Option(enum.Enum):
     symbol = enum.auto()
 
 collection_options = {
-    Option.assembler: {Option.section},
+    Option.assembler: {Option.section, Option.assembler_output},
     Option.symbol: {Option.assembler, Option.name, Option.alignment}
 }
 
@@ -58,7 +58,7 @@ class Script:
         if self.options.is_set(Option.include_directories):
             self.arg_parser.add_argument("-I", metavar="DIRECTORY", dest="include_directories", default=[], action="append", help="search for files in DIRECTORY")
         if self.options.is_set(Option.name):
-            self.arg_parser.add_argument("-n", "--name", metavar="NAME", dest="symbol_name", help="define symbol NAME")
+            self.arg_parser.add_argument("-n", "--name", metavar="NAME", dest="name", help="define symbol NAME")
         if self.options.is_set(Option.runlength_encode):
             self.arg_parser.add_argument("-r", "--runlength", dest="runlength", action="store_true", help="runlength encode data")
         if self.options.is_set(Option.section):
