@@ -37,9 +37,7 @@ import argparse
 import enum
 import yaml
 
-import AssemblerOutput
-import Dependencies
-import AtomicOutput
+import Script
 
 class FieldType(enum.Enum):
     SINGLE = "single"
@@ -111,54 +109,45 @@ class Spec:
         for struct in yaml["structs"]:
             self.structs.append(self.decode_struct(struct))
 
-output = AtomicOutput.AtomicOutput()
+class ParallelStruct(Script.Script):
+    def __init(self) -> None:
+        super().__init__("Convert array of structs into parallel arrays.", Script.Option.assembler)
+        self.arg_parser.add_argument("structs")
 
-parser = argparse.ArgumentParser(description='Convert images to charset and screens.')
+    # Get filename of input file.
+    def input_filename(self):
+        return self.args.structs
 
-parser.add_argument("structs")
-parser.add_argument("output")
-parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
+    def execute_sub(self):
+        with open(self.input_filename(), "r") as stream:
+            try:
+                structs = Spec(yaml.safe_load(stream))
+            except yaml.YAMLError as exc:
+                raise RuntimeError(f"can't load structs from '{self.input_filename()}: {exc}")
 
-args = parser.parse_args()
+        for key in structs.fields.keys():
+            field = structs.fields[key]
 
-output.set_filename(args.output)
-dependencies = Dependencies.Dependencies(args.depfile, args.output)
-dependencies.add(args.structs)
+            if field.type == FieldType.OMIT:
+                continue
 
-with open(args.structs, "r") as stream:
-    try:
-        structs = Spec(yaml.safe_load(stream))
-    except yaml.YAMLError as exc:
-        output.abort(f"can't load structs from '{args.structs}: {exc}")
+            if field.type == FieldType.STRING:
+                for i, struct in enumerate(structs.structs):
+                    encoding = field.encoding
+                    if encoding is None:
+                        encoding = structs.settings.default_string_encoding
+                    self.assembler.begin_object(f"{structs.settings.prefix}{key}_{i}")
+                    self.assembler.string(struct[key], encoding)
+                    self.assembler.end_object()
 
-assembler = AssemblerOutput.AssemblerOutput(output.get_file())
-assembler.header(args.structs)
-assembler.section("data")
+            self.assembler.begin_object(f"{structs.settings.prefix}{key}")
+            for i, struct in enumerate(structs.structs):
+                if field.type == FieldType.STRING:
+                    value = f"{structs.settings.prefix}{key}_{i}"
+                else:
+                    value = struct[key]
+                encoding = field.encoding if field.type != FieldType.STRING else None
+                self.assembler.data(value, encoding)
+            self.assembler.end_object()
 
-for key in structs.fields.keys():
-    field = structs.fields[key]
-
-    if field.type == FieldType.OMIT:
-        continue
-
-    if field.type == FieldType.STRING:
-        for i, struct in enumerate(structs.structs):
-            encoding = field.encoding
-            if encoding is None:
-                encoding = structs.settings.default_string_encoding
-            assembler.local_symbol(f"{structs.settings.prefix}{key}_{i}")
-            assembler.string(struct[key], encoding)
-            assembler.end_object()
-
-    assembler.begin_object(f"{structs.settings.prefix}{key}")
-    for i, struct in enumerate(structs.structs):
-        if field.type == FieldType.STRING:
-            value = f"{structs.settings.prefix}{key}_{i}"
-        else:
-            value = struct[key]
-        encoding = field.encoding if field.type != FieldType.STRING else None
-        assembler.data(value, encoding)
-    assembler.end_object()
-
-output.close()
-dependencies.write()
+ParallelStruct().run()
