@@ -74,6 +74,9 @@ class AssemblerOutput:
     def comment(self, comment):
         print(f"; {comment}", file=self.file)
 
+    def constant(self, name, value):
+        print(f"{name} = {value}", file=self.file)
+    
     def data(self, value, encoding=None, line_length=16):
         if type(value) != list:
             value = [value]
@@ -102,6 +105,12 @@ class AssemblerOutput:
         self.comment(f"This file is automatically created by {sys.argv[0]} from {input_file}.")
         self.comment(f"Do not edit.")
         self.empty_line()
+    
+    def label(self, name, visibility=None):
+        visiblity_string = ""
+        if visibility is not None:
+            visiblity_string = f".{visibility} "
+        print(f"{visiblity_string}{name}:", file=self.file)
 
     def parts(self, name, parts, include_count=True):
         if include_count:
