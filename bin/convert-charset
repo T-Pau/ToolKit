@@ -53,7 +53,10 @@ class ConvertCharset(Script.Script):
     def execute_sub(self):
         charset = CharacterImage.CharacterImage(self.input_filename(), 8, 8)
 
-        if self.args.runlength:
+        runlength_encode = self.args.runlength
+        self.args.runlength = False
+
+        if runlength_encode:
             runlength = RunlengthEncoder.RunlengthEncoder()
             for index in range(0, charset.count):
                 char = charset.get(index)
@@ -71,7 +74,7 @@ class ConvertCharset(Script.Script):
         self.symbol(binary)
 
         if self.args.inverted:
-            if self.args.runlength:
+            if runlength_encode:
                 runlength = RunlengthEncoder.RunlengthEncoder()
                 for index in range(0, charset.count):
                     char = charset.get(index)
