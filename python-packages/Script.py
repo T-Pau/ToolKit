@@ -78,6 +78,7 @@ class Script:
             self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
             if not self.output.run(lambda: self.execute()):
                 sys.exit(1)
+            self.dependencies.check()
         except Exception as ex:
             print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             sys.exit(1)
@@ -190,3 +191,4 @@ class Script:
             self.assembler.section(self.args.section)
         self.execute_sub()
         self.dependencies.write()
+        self.dependencies.check()

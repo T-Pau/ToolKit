@@ -32,9 +32,8 @@ import sys
 import sys
 
 class Dependencies:
-    dependencies = set()
-
     def __init__(self, filename, target):
+        self.dependencies = set()
         self.filename = filename
         self.target = target
         self.dependencies.add(sys.argv[0])
@@ -52,3 +51,22 @@ class Dependencies:
             with open(self.filename, "w") as file:
                 print(f"{self.target}: ", end="", file=file)
                 print(" ".join(self.dependencies), file=file)
+
+    def check(self):
+        if not os.path.exists(self.target):
+            raise RuntimeError(f"failed to create output file '{self.target}'")
+        target_mtime = os.path.getmtime(self.target)
+        depends_mtime = None
+        if self.filename is not None:
+            if not os.path.exists(self.filename):
+                raise RuntimeError(f"failed to create dependency file '{self.filename}'")
+            depends_mtime = os.path.getmtime(self.filename)
+
+        for dependnecy in self.dependencies:
+            if not os.path.exists(dependnecy):
+                raise RuntimeError(f"dependency '{dependnecy}' does not exist")
+            mtime = os.path.getmtime(dependnecy)
+            if mtime > target_mtime:
+                raise RuntimeError(f"dependency '{dependnecy}' is newer than output file '{self.target}'")
+            if depends_mtime is not None and mtime > depends_mtime:
+                raise RuntimeError(f"dependency '{dependnecy}' is newer than dependency file '{self.filename}'")
