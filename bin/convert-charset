@@ -33,6 +33,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
 
 import CharacterImage
+import RunlengthEncoder
 import Script
 
 class ConvertCharset(Script.Script):
@@ -83,7 +84,7 @@ class ConvertCharset(Script.Script):
             else:
                 self.invert(binary)
 
-            self.assembler.bytes_object(self.args.name + "_inverted", binary)
+            self.symbol(binary, name_suffix="_inverted")
 
     def invert(self, data):
         for i, v in enumerate(data):

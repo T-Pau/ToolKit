@@ -114,7 +114,7 @@ class Script:
         self.add_dependency(file)
         return file
 
-    def symbol(self, binary):
+    def symbol(self, binary, name_suffix=""):
         alignment = None
         if self.args.runlength:
             runlength = RunlengthEncoder.RunlengthEncoder()
@@ -123,7 +123,7 @@ class Script:
         if self.args.alignment is not None:
             alignment = int(self.args.alignment)
 
-        self.assembler.bytes_object(self.args.name, binary, section=self.args.section, alignment=alignment)
+        self.assembler.bytes_object(self.symbol_name()+name_suffix, binary, section=self.args.section, alignment=alignment)
 
 
     # Get filename of final output file.
