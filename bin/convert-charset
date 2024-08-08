@@ -77,15 +77,15 @@ class ConvertCharset(Script.Script):
                     if char is None:
                         runlength.skip(8)
                     else:
-                        invert(char)
+                        self.invert(char)
                         runlength.add_bytes(char)
                 binary = runlength.end()
             else:
-                invert(binary)
+                self.invert(binary)
 
             self.assembler.bytes_object(self.args.name + "_inverted", binary)
 
-    def invert(data):
+    def invert(self, data):
         for i, v in enumerate(data):
             data[i] = ~v & 0xff
 
