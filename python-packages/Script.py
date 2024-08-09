@@ -78,6 +78,7 @@ class Script:
             self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
             if not self.output.run(lambda: self.execute()):
                 sys.exit(1)
+            self.dependencies.check()
         except Exception as ex:
             print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             sys.exit(1)
@@ -113,7 +114,7 @@ class Script:
         self.add_dependency(file)
         return file
 
-    def symbol(self, binary):
+    def symbol(self, binary, name_suffix=""):
         alignment = None
         if self.args.runlength:
             runlength = RunlengthEncoder.RunlengthEncoder()
@@ -122,7 +123,7 @@ class Script:
         if self.args.alignment is not None:
             alignment = int(self.args.alignment)
 
-        self.assembler.bytes_object(self.args.name, binary, section=self.args.section, alignment=alignment)
+        self.assembler.bytes_object(self.symbol_name()+name_suffix, binary, section=self.args.section, alignment=alignment)
 
 
     # Get filename of final output file.
@@ -190,3 +191,4 @@ class Script:
             self.assembler.section(self.args.section)
         self.execute_sub()
         self.dependencies.write()
+        self.dependencies.check()

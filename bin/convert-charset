@@ -33,26 +33,30 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
 
 import CharacterImage
+import RunlengthEncoder
 import Script
 
 class ConvertCharset(Script.Script):
-    def __init(self) -> None:
-        super().init("Convert charset image.", Script.Option.symbol, Script.Option.runlength_encode)
+    def __init__(self) -> None:
+        super().__init__("Convert charset image.", Script.Option.symbol, Script.Option.runlength_encode)
         self.arg_parser.add_argument("image")
         self.arg_parser.add_argument("-i", dest="inverted", action="store_true", help="create inverted charset")
 
     # Get filename of input file.
     def input_filename(self):
-        return self.args.specs
+        return self.args.image
 
     # Alignment to use if --align option is given.
     def natural_alignment(self):
         return 0x800
 
     def execute_sub(self):
-        charset = CharacterImage.CharacterImage(args.image, 8, 8)
+        charset = CharacterImage.CharacterImage(self.input_filename(), 8, 8)
 
-        if self.args.runlength:
+        runlength_encode = self.args.runlength
+        self.args.runlength = False
+
+        if runlength_encode:
             runlength = RunlengthEncoder.RunlengthEncoder()
             for index in range(0, charset.count):
                 char = charset.get(index)
@@ -70,21 +74,23 @@ class ConvertCharset(Script.Script):
         self.symbol(binary)
 
         if self.args.inverted:
-            if self.args.runlength:
+            if runlength_encode:
                 runlength = RunlengthEncoder.RunlengthEncoder()
                 for index in range(0, charset.count):
                     char = charset.get(index)
                     if char is None:
                         runlength.skip(8)
                     else:
-                        invert(char)
+                        self.invert(char)
                         runlength.add_bytes(char)
                 binary = runlength.end()
             else:
-                invert(binary)
+                self.invert(binary)
 
-            self.assembler.bytes_object(self.args.name + "_inverted", binary)
+            self.symbol(binary, name_suffix="_inverted")
 
-    def invert(data):
+    def invert(self, data):
         for i, v in enumerate(data):
             data[i] = ~v & 0xff
+
+ConvertCharset().run()
