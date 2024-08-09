@@ -109,7 +109,7 @@ class Script:
                 if optional:
                     return None
                 else:
-                    raise RuntimeError(f"can't find {file}")
+                    raise RuntimeError(f"can't find file '{file}'")
         self.add_dependency(file)
         return file
 
