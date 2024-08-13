@@ -67,7 +67,7 @@ class AssemblerOutput:
             self.file.write("\n")
 
     def bytes_object(self, name, bytes_array, section="data", visibility=None, alignment=None):
-        self.begin_object(name, section=section, alignment=alignment)
+        self.begin_object(name, section=section, alignment=alignment, visibility=visibility)
         self.bytes(bytes_array)
         self.end_object()
 
@@ -77,6 +77,11 @@ class AssemblerOutput:
     def constant(self, name, value):
         print(f"{name} = {value}", file=self.file)
     
+    def data_object(self, name, data, section="data", visibility=None, alignment=None):
+        self.begin_object(name, section=section, alignment=alignment, visibility=visibility)
+        self.data(data)
+        self.end_object()
+
     def data(self, value, encoding=None, line_length=16):
         if type(value) != list:
             value = [value]
