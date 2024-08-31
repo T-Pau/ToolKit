@@ -1,5 +1,5 @@
 """
-  AssemblerOutput -- create output in various assembler formats
+  AssemblerOutput -- create output in Accelerate assembler format
   Copyright (C) Dieter Baron
 
   The author can be contacted at <dillo@tpau.group>.

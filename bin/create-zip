@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-  create-zip -- create zip archvie
+  create-zip -- create zip archive
   Copyright (C) Dieter Baron
 
   The author can be contacted at <dillo@tpau.group>.
