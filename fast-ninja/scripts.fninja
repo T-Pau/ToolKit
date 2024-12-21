@@ -1,4 +1,4 @@
-bin_directory = $top_source_directory/Toolkit/bin
+bin_directory := $top_source_directory/Toolkit/bin
 
 rule convert-bitmap
     command = {{$bin_directory/convert-bitmap}} -M $depfile $flags -n $name -o $out $in
@@ -31,3 +31,7 @@ rule convert-image
 rule encode-colors
     command = {{$bin_directory/encode-colors}} -M $depfile $flags -o $out $in
     depfile = $out.d
+
+rule create-zip
+    command = {{$bin_directory/create-zip}} -M $depfile $flags $out $in
+    depfile = .dep.$out
