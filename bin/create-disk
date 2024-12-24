@@ -37,7 +37,7 @@ import Script
 
 class CreateDisk(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Create disk image.", Script.Option.include_directories)
+        super().__init__("Create disk image.", Script.Option.include_directories, Script.Option.dyndep)
         self.arg_parser.add_argument("filelist")
 
     # Get filename of input file.
@@ -47,12 +47,26 @@ class CreateDisk(Script.Script):
     # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
     def default_output_extension(self):
         return "d64"
+    
+    def get_dynamic_dependencies(self):
+        return self.parse_filelist(True)
 
     def execute_sub(self):
+        commands = self.parse_filelist(False)
+        c1541 = Command.Command("c1541", [], commands)
+        c1541.run()
+
+        if c1541.exit_code != 0 or len(c1541.stderr) > 0:
+            print("\n".join(c1541.stderr))
+            raise RuntimeError(f"creating disk image failed")
+
+    def parse_filelist(self, deps_only=False):
         filelist = self.input_filename()
         type = os.path.splitext(self.output_file_name())[1][1:]
 
         commands = []
+        used_files = []
+
         header = True
         with open(filelist, "r") as file:
             for line in file:
@@ -62,23 +76,22 @@ class CreateDisk(Script.Script):
                     header = False
                 else:
                     if line.startswith("c128-boot "):
-                        file = self.find_file(line[9:].strip())
+                        file = self.find_file(line[9:].strip(), deps_only, deps_only)
                         commands.append(f"bwrite \"{file}\" 1 0")
+                        used_files.append(file)
                     elif line.startswith("bpoke "):
                         commands.append(line)
                     else:
                         sep = line.find(">")
                         if sep == -1:
                             raise RuntimeError(f"invalid line '{line}'")
-                        file = self.find_file(line[:sep].strip())
+                        file = self.find_file(line[:sep].strip(), deps_only, deps_only)
                         name = line[sep+1:].strip()
                         commands.append(f"write \"{file}\" \"{name}\"")
-
-        c1541 = Command.Command("c1541", [], commands)
-        c1541.run()
-
-        if c1541.exit_code != 0 or len(c1541.stderr) > 0:
-            print("\n".join(c1541.stderr))
-            raise RuntimeError(f"creating disk image failed")
+                        used_files.append(file)
+            if deps_only:
+                return used_files
+            else:
+                return commands
 
 CreateDisk().run()

@@ -43,6 +43,7 @@ class Option(enum.Enum):
     section = enum.auto()
     runlength_encode = enum.auto()
     include_directories = enum.auto()
+    dyndep = enum.auto()
 
     # collections
     assembler = enum.auto()
@@ -83,6 +84,8 @@ class Script:
         self.dependencies = None
         self.assembler = None
 
+        if self.options.is_set(Option.dyndep):
+            self.arg_parser.add_argument("--dyndep", metavar="FILE", dest="dyndep", help="output dynamic dependencies to FILE.")
         if self.options.is_set(Option.alignment):
             if self.natural_alignment() is not None:
                 self.arg_parser.add_argument("--align", const=self.natural_alignment(), action="store_const", dest="alignment", help=f"align to {self.natural_alignment()}")
@@ -100,13 +103,18 @@ class Script:
         try:
             self.args = self.arg_parser.parse_args()
 
-            self.prepare()
+            if self.options.is_set(Option.dyndep) and self.args.dyndep:
+                self.output.set_filename(self.args.dyndep)
+                if not self.output.run(lambda: self.create_dyndep()):
+                    sys.exit(1)
+            else:
+                self.prepare()
 
-            self.output.set_filename(self.output_filename())
-            self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
-            if not self.output.run(lambda: self.execute()):
-                sys.exit(1)
-            self.dependencies.check()
+                self.output.set_filename(self.output_filename())
+                self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
+                if not self.output.run(lambda: self.execute()):
+                    sys.exit(1)
+                self.dependencies.check()
         except Exception as ex:
             print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             sys.exit(1)
@@ -118,14 +126,15 @@ class Script:
 
     # Add FILE as dependency.
     def add_dependency(self, file):
-        self.dependencies.add(file)
+        if self.dependencies is not None:
+            self.dependencies.add(file)
     
     # Print error.
     def error(self, message):
         self.output.error(message)
 
     # Find FILE.
-    def find_file(self, file, optional=False):
+    def find_file(self, file, optional=False, dyndep=False):
         if not os.path.exists(file):
             found = False
             for directory in [os.path.dirname(self.input_filename())] + self.args.include_directories:
@@ -136,7 +145,8 @@ class Script:
                     break
             if not found:
                 if optional:
-                    return None
+                    if not dyndep:
+                        return None
                 else:
                     raise RuntimeError(f"can't find file '{file}'")
         self.add_dependency(file)
@@ -181,6 +191,8 @@ class Script:
     # Do actual processing.
     # execute_sub(self)
 
+    # Get list of dependencies for dynamic dependency discovery (only needed if dyndep option is set)
+    # get_dynamic_dependencies(self)
 
     # Optional Subclass Metods
 
@@ -220,3 +232,10 @@ class Script:
         self.execute_sub()
         self.dependencies.write()
         self.dependencies.check()
+    
+    def create_dyndep(self):
+        dependencies = self.get_dynamic_dependencies()
+        # TODO: quote spaces &c
+        dependencies_string = " ".join(dependencies)
+        print("ninja_dyndep_version = 1", file=self.output_file())
+        print(f"build {self.output_filename()} : dyndep | {dependencies_string}", file=self.output_file())

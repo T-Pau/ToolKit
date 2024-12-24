@@ -24,6 +24,9 @@ rule create-disk
     command = {{$bin_directory/create-disk}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
+rule create-disk-dyndep
+    command = {{$bin_directory/create-disk}} $flags -o $output --dyndep $out $in
+
 rule convert-image
     command = {{$bin_directory/convert-image}} -M $depfile $flags -o $out $in
     depfile = $out.d
