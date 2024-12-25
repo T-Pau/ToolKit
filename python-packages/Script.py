@@ -137,7 +137,10 @@ class Script:
     def find_file(self, file, optional=False, dyndep=False):
         if not os.path.exists(file):
             found = False
-            for directory in [os.path.dirname(self.input_filename())] + self.args.include_directories:
+            relative_directories = []
+            if self.input_filename() is not None:
+                relative_directories = [os.path.dirname(self.input_filename())]
+            for directory in relative_directories + self.args.include_directories:
                 new_file = os.path.join(directory, file)
                 if os.path.exists(new_file):
                     file = new_file
@@ -182,6 +185,8 @@ class Script:
     def symbol_name(self):
         if self.args.name is not None:
             return self.args.name
+        if self.input_filename() is None:
+            raise RuntimeError("no name or input file specififed")
         # TODO: remove invalid characters
         return os.path.splitext(self.input_filename())[0].replace("-", "_")
 
@@ -217,6 +222,8 @@ class Script:
     
     # Get filename of final output file if not specified via `-o` command line option.
     def default_output_filename(self):
+        if self.input_filename() is None:
+            raise RuntimeError("no output or input file name specified")
         name, extension = os.path.splitext(self.input_filename())
         return os.path.basename(name) + "." + self.default_output_extension()
 
