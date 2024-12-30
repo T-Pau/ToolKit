@@ -38,15 +38,19 @@ import RunlengthEncoder
 import Script
 
 strip_comments = r" *;.*"
+parse_width = r"(\d+)/(\d+)"
 
 class Object:
-    def __init__(self, name, width, height, color) -> None:
+    def __init__(self, name, width, height, color, line_width = None) -> None:
         self.name = name
         self.width = width
         self.height = height
         self.colors = [[[color for x in range(width)] for y in range(height)]]
         self.predicate = None
         self.predicate_index = None
+        self.line_skip = 0
+        if line_width:
+            self.line_skip = line_width - width
     
     def fill(self, x, y, width, height, color) -> None:
         for index in range(len(self.colors)):
@@ -91,13 +95,18 @@ class Object:
     
     def output_data(self, index, assembler, runlength):
         assembler.begin_object(self.name)
+        if runlength:
+            encoder = RunlengthEncoder.RunlengthEncoder(binary=False)
         data = []
         for y in range(self.height):
             for x in range(self.width):
                 data.append(self.colors[index][y][x])
+            if runlength and self.line_skip > 0:
+                encoder.add_bytes(data)
+                data = []
+                encoder.skip(self.line_skip)
 
         if runlength:
-            encoder = RunlengthEncoder.RunlengthEncoder(binary=False)
             encoder.add_bytes(data)
             data = encoder.end()
         assembler.data(data)
@@ -115,11 +124,18 @@ class EncodeColor(Script.Script):
                 words = line.split(" ")
                 if len(words) != 5 or words[4] != "{":
                     raise RuntimeError(f"invalid object '{line}'")
-                object = self.parse_object(file, words[0], int(words[1]), int(words[2]), words[3])
+                match = re.search(parse_width, words[1])
+                if match:
+                    width = int(match.group(1))
+                    line_width = int(match.group(2))
+                else:
+                    width = int(words[1])
+                    line_width = None
+                object = self.parse_object(file, words[0], width, int(words[2]), words[3], line_width)
                 object.output(self.assembler, self.args.runlength)
 
-    def parse_object(self, file, name, width, height, color):
-        object = Object(name, width, height, color)
+    def parse_object(self, file, name, width, height, color, line_width):
+        object = Object(name, width, height, color, line_width)
         while line := self.next_line(file):
             if line == "}":
                 if object.is_in_if():

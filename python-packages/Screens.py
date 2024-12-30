@@ -30,8 +30,16 @@ import os.path
 import re
 import sys
 
+import enum
+
+
 import AssemblerOutput
 import RunlengthEncoder
+
+class PageMode(enum.Enum):
+    SINGLE = "single"
+    OBJECTS = "objects"
+    PAGES = "pages"
 
 map_chars = r"'(.)'(?:-'(.)')?"
 map_codes = r"\$([0-9a-fA-F]*)(?:-\$([0-9a-fA-F]*))?"
@@ -111,7 +119,7 @@ class Screens:
         self.line_length = 40
         self.lines = 25
         self.line_skip = 0
-        self.single_screen = False
+        self.page_mode = PageMode.PAGES
         self.prefix = b""
         self.postfix = b""
         self.word_wrap = False
@@ -124,8 +132,10 @@ class Screens:
         self.encoder = RunlengthEncoder.RunlengthEncoder()
         self.in_preamble = True
         self.compressed_screens = []
+        self.screen_names = []
         self.current_line = 0
         self.current_title = b""
+        self.current_name = None
         self.ignore_empty_line = False
         self.showing = [True]
         self.files = []
@@ -299,26 +309,26 @@ class Screens:
             self.postfix = self.parse_fix(line)
         else:
             words = line.split(" ")
-            if words[0] == "line_length":
-                self.line_length = int(words[1])
-            elif words[0] == "lines":
-                self.lines = int(words[1])
-            elif words[0] == "line_skip":
-                self.line_skip = int(words[1])
-            elif words[0] == "title_length":
-                self.title_length = int(words[1])
-            elif words[0] == "image_padding_left":
+            if words[0] == "image_padding_left":
                 self.image_padding_left = self.map_string(words[1])
             elif words[0] == "image_padding_right":
                 self.image_padding_right = self.map_string(words[1])
+            elif words[0] == "line_length":
+                self.line_length = int(words[1])
+            elif words[0] == "line_skip":
+                self.line_skip = int(words[1])
+            elif words[0] == "lines":
+                self.lines = int(words[1])
             elif words[0] == "map":
                 self.add_map(words[1], words[2])
             elif words[0] == "name":
                 self.name = words[1]
+            elif words[0] == "page_mode":
+                self.page_mode = PageMode(words[1])
+            elif words[0] == "title_length":
+                self.title_length = int(words[1])
             elif words[0] == "title_xor":
                 self.title_xor = int(words[1])
-            elif words[0] == "single_screen":
-                self.single_screen = int(words[1])
             elif words[0] == "word_wrap":
                 self.word_wrap = int(words[1])
             else:
@@ -334,6 +344,10 @@ class Screens:
                     self.error(f"title too long: '{line}'")
                 self.add_string(line, self.title_length, self.title_xor)
                 self.current_title = self.encoder.end()
+                self.ignore_empty_line = True
+                return
+            elif self.page_mode == PageMode.OBJECTS and self.current_name is None:
+                self.current_name = line
                 self.ignore_empty_line = True
                 return
             if self.ignore_empty_line and line == "":
@@ -377,7 +391,10 @@ class Screens:
             self.compressed_screens.append(self.current_title + self.encoder.end())
             self.current_title = b""
             self.current_line = 0
+            if self.page_mode == PageMode.OBJECTS:
+                self.screen_names.append(self.current_name)
             self.ignore_empty_line = False
+            self.current_name = None
 
     def end(self):
         self.end_screen()
@@ -447,8 +464,8 @@ class Screens:
                 self.prefix = value
             elif option == "postfix":
                 self.postfix = value
-            elif option == "single_screen":
-                self.single_screen = value
+            elif option == "page_mode":
+                self.page_mode = PageMode(value)
             elif option == "title_length":
                 self.title_length = value
             elif option == "title_xor":
@@ -461,10 +478,10 @@ class Screens:
             output = AssemblerOutput.AssemblerOutput(output_file)
             output.header(self.input_file)
             output.section("data")
-        if self.single_screen:
-            output.begin_object(self.name)
-            output.bytes(self.compressed_screens[0])
-            output.end_object()
+        if self.page_mode == PageMode.SINGLE:
+            output.bytes_object(self.name, self.compressed_screens[0])
+        elif self.page_mode == PageMode.OBJECTS:
+            output.parts(self.name, self.compressed_screens, include_count=False, include_index=False, names=self.screen_names)
         else:
             output.parts(self.name, self.compressed_screens)
 

@@ -56,8 +56,8 @@ class Spec:
     class Settings:
         def __init__(self, yaml):
             self.default_string_encoding = Spec.decode(yaml, "default_string_encoding")
+            self.include_count = Spec.decode(yaml, "include_count", True)
             self.prefix = Spec.decode(yaml, "prefix", "")
-            self.default_name_field = Spec.decode(yaml, "default_name_field", "name")
 
     class Field:
         def __init__(self, yaml, settings):
@@ -65,9 +65,11 @@ class Spec:
             self.encoding = Spec.decode(yaml, "encoding")
             self.default_value = Spec.decode(yaml, "default_value")
             self.length = Spec.decode(yaml, "length", 1)
+            self.nul_terminate = Spec.decode(yaml, "nul_terminate", False)
             self.padding = Spec.decode(yaml, "padding", self.default_padding())
-            self.default_value_prefix = Spec.decode(yaml, "default_value_prefix")
-            self.default_value_field = Spec.decode(yaml, "default_value_field", settings.default_name_field)
+            self.default_value_prefix = Spec.decode(yaml, "default_value_prefix", "")
+            self.default_value_postfix = Spec.decode(yaml, "default_value_postfix", "")
+            self.default_value_field = Spec.decode(yaml, "default_value_field")
 
         def default_padding(self):
             if self.type == FieldType.MULTI or self.type == FieldType.SINGLE:
@@ -83,10 +85,12 @@ class Spec:
                 value = yaml[key]
             elif field.default_value is not None:
                 value = field.default_value
-            elif field.default_value_prefix is not None:
-                value = field.default_value_prefix + yaml[field.default_value_field]
+            elif field.default_value_field is not None and field.default_value_field in yaml:
+                value = field.default_value_prefix + yaml[field.default_value_field] + field.default_value_postfix
             elif field.type == FieldType.MULTI:
                 value = []
+            elif field.type == FieldType.OMIT:
+                value = None
             else:
                 raise RuntimeError(f"no known value for {key}")
 
@@ -110,7 +114,7 @@ class Spec:
             self.structs.append(self.decode_struct(struct))
 
 class ParallelStruct(Script.Script):
-    def __init(self) -> None:
+    def __init__(self) -> None:
         super().__init__("Convert array of structs into parallel arrays.", Script.Option.assembler)
         self.arg_parser.add_argument("structs")
 
@@ -125,6 +129,8 @@ class ParallelStruct(Script.Script):
             except yaml.YAMLError as exc:
                 raise RuntimeError(f"can't load structs from '{self.input_filename()}: {exc}")
 
+        if structs.settings.include_count:
+            self.assembler.data_object(f"{structs.settings.prefix}count", len(structs.structs))
         for key in structs.fields.keys():
             field = structs.fields[key]
 
@@ -137,7 +143,7 @@ class ParallelStruct(Script.Script):
                     if encoding is None:
                         encoding = structs.settings.default_string_encoding
                     self.assembler.begin_object(f"{structs.settings.prefix}{key}_{i}")
-                    self.assembler.string(struct[key], encoding)
+                    self.assembler.string(struct[key], encoding, field.nul_terminate)
                     self.assembler.end_object()
 
             self.assembler.begin_object(f"{structs.settings.prefix}{key}")

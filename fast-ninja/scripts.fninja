@@ -27,6 +27,10 @@ rule create-disk
 rule create-disk-dyndep
     command = {{$bin_directory/create-disk}} $flags -o $output --dyndep $out $in
 
+rule create-zip
+    command = {{$bin_directory/create-zip}} -M $depfile $flags $out $in
+    depfile = .dep.$out
+
 rule convert-image
     command = {{$bin_directory/convert-image}} -M $depfile $flags -o $out $in
     depfile = $out.d
@@ -35,6 +39,6 @@ rule encode-colors
     command = {{$bin_directory/encode-colors}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
-rule create-zip
-    command = {{$bin_directory/create-zip}} -M $depfile $flags $out $in
-    depfile = .dep.$out
+rule parallel-struct
+    command = {{$bin_directory/parallel-struct}} -M $depfile -o $out $in
+    depfile = $out.d

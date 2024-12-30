@@ -54,6 +54,12 @@
     sta address + 1
 }
 
+.public .macro store_word_indexed address, table {
+    lda table,x
+    sta address
+    lda table + 1,x
+    sta address + 1
+}
 
 .public .macro add_word address, value {
     clc

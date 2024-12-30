@@ -61,35 +61,49 @@ class Spec:
 
     class Charset:
         def __init__(self, yaml_spec):
+            self.align = Spec.decode(yaml_spec, "align")
             self.count = Spec.decode(yaml_spec, "count", 256)
-            self.width = Spec.decode(yaml_spec, "width", 8)
             self.height = Spec.decode(yaml_spec, "height", 8)
             self.name = Spec.decode(yaml_spec, "name")
-            self.rl_encode = Spec.decode(yaml_spec, "rl_encode", False)
             self.predefined = Spec.decode(yaml_spec, "predefined", {})
+            self.rl_encode = Spec.decode(yaml_spec, "rl-encode", False)
+            self.width = Spec.decode(yaml_spec, "width", 8)
+
+            if self.rl_encode:
+                self.align = None
 
     class Image:
         def __init__(self, yaml_spec, spec):
-            self.file = os.path.join(spec.directory, Spec.decode(yaml_spec, "file"))
-            self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
-            self.include_count = Spec.decode(yaml_spec, "include-count", True)
-            self.name = Spec.decode(yaml_spec, "name")
-            self.screen_file = Spec.decode(yaml_spec, "screen-file")
-            self.rl_encode = Spec.decode(yaml_spec, "rl-encode", True)
-            if self.screen_file is not None:
-                self.rl_encode = False
-            self.screen_width = Spec.decode(yaml_spec, "screen-width", spec.screen_width)
-            self.slice_x = Spec.decode(yaml_spec, "slice-x", 1)
-            self.slice_y = Spec.decode(yaml_spec, "slice-y", 1)
-            self.type = Spec.decode(yaml_spec, "type")
-            self.offset = Spec.decode(yaml_spec, "offset", 0)
-            self.trim = RunlengthEncoder.Trim(Spec.decode(yaml_spec, "trim", "trailing"))
             self.charset = Spec.decode(yaml_spec, "charset", 0)
-            if type(self.charset) is dict and self.type != "image":
-                raise RuntimeError("multiple charsets only supported for images")
+            self.file = Spec.decode(yaml_spec, "file")
+            self.include_count = Spec.decode(yaml_spec, "include-count", True)
+            self.include_index = Spec.decode(yaml_spec, "include-index", True)
+            self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
+            self.name = Spec.decode(yaml_spec, "name")
+            self.names = Spec.decode(yaml_spec, "names")
+            self.offset = Spec.decode(yaml_spec, "offset", 0)
             pixel_size_x = Spec.decode(yaml_spec, "pixel-size-x", 1)
             pixel_size_y = Spec.decode(yaml_spec, "pixel-size-y", 1)
             self.pixel_size = PaletteImage.PixelSize(pixel_size_x, pixel_size_y)
+            self.rl_encode = Spec.decode(yaml_spec, "rl-encode", True)
+            self.screen_file = Spec.decode(yaml_spec, "screen-file")
+            self.screen_width = Spec.decode(yaml_spec, "screen-width", spec.screen_width)
+            self.slice_x = Spec.decode(yaml_spec, "slice-x", 1)
+            self.slice_y = Spec.decode(yaml_spec, "slice-y", 1)
+            self.trim = RunlengthEncoder.Trim(Spec.decode(yaml_spec, "trim", "trailing"))
+            self.type = Spec.decode(yaml_spec, "type")
+
+            if not self.include_index:
+                self.include_count = False
+            if self.screen_file is not None:
+                self.rl_encode = False
+            if type(self.charset) is dict and self.type != "image":
+                raise RuntimeError("multiple charsets only supported for images")
+            if self.names is not None:
+                if type(self.names) is not list:
+                    raise RuntimeError("names must be list")
+                if len(self.names) != self.slice_x * self.slice_y:
+                    raise RuntimeError(f"expected {self.slice_x*self.slice_y} names, got {len(self.names)}")
 
     def __init__(self, spec_file):
         with open(spec_file, "r") as stream:
@@ -166,7 +180,7 @@ class ConvertCharacters(Script.Script):
                 runlength = RunlengthEncoder.RunlengthEncoder()
                 runlength.add_bytes(charset_bytes)
                 charset_bytes = runlength.end()
-            self.assembler.bytes_object(charset_spec.name, charset_bytes)
+            self.assembler.bytes_object(charset_spec.name, charset_bytes, alignment=charset_spec.align)
 
             self.assembler.comment(f"{charset.character_count} of {charset.size} characters used")
 
@@ -271,7 +285,7 @@ class ConvertCharacters(Script.Script):
                                         chars += char.to_bytes(1, byteorder="little")
                             except Exception as ex:
                                 self.error(f"{image_spec.file} at slice {x}/{y} char {xx}/{yy}: {ex}")
-                                
+                        
                 if not prerun:
                     if image_spec.rl_encode:
                         parts.append(runlength.end())
@@ -287,7 +301,7 @@ class ConvertCharacters(Script.Script):
                 if count == 1:
                     self.assembler.bytes_object(image_spec.name, parts[0])
                 else:
-                    self.assembler.parts(image_spec.name, parts, image_spec.include_count)
+                    self.assembler.parts(image_spec.name, parts, include_count=image_spec.include_count, include_index=image_spec.include_index, names=image_spec.names)
 
 
     processors = {

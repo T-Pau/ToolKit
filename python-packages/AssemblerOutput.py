@@ -71,6 +71,14 @@ class AssemblerOutput:
         self.bytes(bytes_array)
         self.end_object()
 
+    def combine_names(self, prefix, name):
+        if name is None:
+            return prefix
+        elif prefix is None:
+            return name
+        else:
+            return f"{prefix}_{name}"
+
     def comment(self, comment):
         print(f"; {comment}", file=self.file)
 
@@ -117,17 +125,18 @@ class AssemblerOutput:
             visiblity_string = f".{visibility} "
         print(f"{visiblity_string}{name}:", file=self.file)
 
-    def parts(self, name, parts, include_count=True):
-        if include_count:
-            self.begin_object(f"{name}_count")
-            self.byte(len(parts))
+    def parts(self, name, parts, include_count=True, include_index=True, names=None):
+        if include_index:
+            if include_count:
+                self.begin_object(f"{name}_count")
+                self.byte(len(parts))
+                self.end_object()
+            self.begin_object(name)
+            for i in range(len(parts)):
+                self.word(f"{name}_{i}")
             self.end_object()
-        self.begin_object(name)
         for i in range(len(parts)):
-            self.word(f"{name}_{i}")
-        self.end_object()
-        for i in range(len(parts)):
-            self.begin_object(f"{name}_{i}")
+            self.begin_object(self.combine_names(name, names[i] if names else f"{i}"))
             self.bytes(parts[i])
             self.end_object()
 
@@ -140,10 +149,12 @@ class AssemblerOutput:
     def pre_if(self, predicate):
         print(f".pre_if {predicate}", file=self.file)
 
-    def string(self, value, encoding=None):
+    def string(self, value, encoding=None, nul_terminate=False):
         print(f"    .data \"{value}\"", end="", file=self.file)
         if encoding is not None:
             print(f":{encoding}", end="", file=self.file)
+        if nul_terminate:
+            print(", 0", end="", file=self.file)
         print("", file=self.file)
 
     def section(self, section):
