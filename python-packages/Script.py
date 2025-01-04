@@ -116,7 +116,10 @@ class Script:
                     sys.exit(1)
                 self.dependencies.check()
         except Exception as ex:
-            print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
+            if "TOOLKIT_DEBUG" in os.environ:
+                traceback.print_exception(ex)
+            elif str(ex) != "":
+                print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             sys.exit(1)
         
 
