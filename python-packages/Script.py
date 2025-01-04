@@ -153,6 +153,8 @@ class Script:
                 if optional:
                     if not dyndep:
                         return None
+                    else:
+                        return os.path.join(os.path.dirname(self.output_file_name()), file)
                 else:
                     raise RuntimeError(f"can't find file '{file}'")
         self.add_dependency(file)
