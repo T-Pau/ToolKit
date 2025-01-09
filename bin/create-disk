@@ -35,9 +35,348 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 import Command
 import Script
 
+class Buffer:
+    def __init__(self):
+        self.data = b""
+    
+    def add_byte(self, byte, count=1):
+        self.data += byte.to_bytes(1, byteorder="little") * count
+    
+    def add_data(self, data, length=0, padding=0):
+        if type(data) is str:
+            # TODO: proper char mapping
+            data = bytearray(data.upper(), "utf-8")
+        self.data += data
+        if len(data) < length:
+            self.data += padding.to_bytes(1, byteorder="little") * (length - len(data))
+    
+    def add_word(self, word):
+        self.data += word.to_bytes(2, byteorder="little")
+
+    def add_int(self, value, size):
+        self.data += value.to_bytes(size, byteorder="little")
+
+    def add_zeros(self, length):
+        self.data += b"\x00" * length
+
+    def clear(self):
+        self.data = b""
+
+    def pad(self, length, padding = 0):
+        if len(self.data) < length:
+            self.data += padding.to_bytes(1, byteorder="little") * (length - len(self.data))
+
+class Disk:
+    class Track:
+        def __init__(self, length):
+            self.sectors = [None] * length
+            self.blocks_free = length
+        
+        def length(self):
+            return len(self.sectors)
+        
+        def is_free(self, sector):
+            if sector >= self.length():
+                raise RuntimeError(f"invalid sector {sector} {self.length()}")
+            return self.sectors[sector] is None
+        
+        def is_full(self):
+            return self.blocks_free == 0
+        
+        def first_free(self):
+            if self.is_full():
+                return None
+            for sector in range(self.length()):
+                if self.is_free(sector):
+                    return sector
+            return None
+        
+        def next_free(self, sector, ignore_sector=None):
+            if sector >= self.length():
+                sector = sector % self.length()
+                if sector > 0:
+                    sector -= 1
+            start_sector = sector
+            while not self.is_free(sector) or sector == ignore_sector:
+                sector += 1
+                if sector >= self.length():
+                    sector = 0
+                if sector == start_sector:
+                    return None
+            return sector
+        
+        def encode_bam(self, buffer, size=3):
+            buffer.add_byte(self.blocks_free)
+            bam = 0
+            for sector in self.sectors:
+                bam = bam << 1 | (1 if sector is None else 0)
+            buffer.add_int(bam, size)
+
+        def write(self, sector, data):
+            if self.is_free(sector):
+                self.blocks_free -= 1
+            self.sectors[sector] = data
+
+        def output(self, file):
+            for sector in self.sectors:
+                if sector is None:
+                    file.write(b"\x00" * 256)
+                else:
+                    file.write(sector)
+    
+    class DirectoryEntry:
+        def __init__(self, name, type, track, sector, blocks):
+            self.name = name
+            self.type = type
+            self.track = track
+            self.sector = sector
+            self.blocks = blocks
+        
+        def encode(self, buffer, track=0, sector=0):
+            buffer.add_byte(track)
+            buffer.add_byte(sector)
+            buffer.add_byte(Disk.file_types[self.type])
+            buffer.add_byte(self.track)
+            buffer.add_byte(self.sector)
+            buffer.add_data(self.name, 16, 0xa0)
+            buffer.add_zeros(9)
+            buffer.add_word(self.blocks)
+            return
+    
+    class Zone:
+        def __init__(self, tracks, sectors):
+            self.tracks = tracks
+            self.sectors = sectors
+    
+    class Layout:
+        def __init__(self, zones, directory_tracks, dos_type, interleave, directory_interleave=None):
+            self.zones = zones
+            self.directory_tracks = directory_tracks
+            self.dos_type = dos_type
+            self.interleave = interleave
+            if directory_interleave is None:
+                self.directory_interleave = self.interleave
+            else:
+                self.directory_interleave = directory_interleave
+    
+    layouts = {
+        "d64": Layout([Zone(17, 21), Zone(7, 19), Zone(6, 18), Zone(5, 17)], [18], "2a", 10, 3),
+        "d71": Layout([Zone(17, 21), Zone(7, 19), Zone(6, 18), Zone(5, 17), Zone(17, 21), Zone(7, 19), Zone(6, 18), Zone(5, 17)], [18, 53], "2a", 6, 3), 
+        "d81": Layout([Zone(80, 40)], [40], "3d", 1)
+    }
+    file_types = {
+        "del": 0x80,
+        "prg": 0x82,
+        "seq": 0x81,
+        "usr": 0x84
+    }
+
+    def __init__(self, type, name, id):
+        if type not in Disk.layouts:
+            raise RuntimeError(f"unknown disk type '{type}'")
+        self.layout = Disk.layouts[type]
+        self.tracks = [None] # track indices start at 1
+        for zone in self.layout.zones:
+            for track in range(zone.tracks):
+                self.tracks.append(Disk.Track(zone.sectors))
+        self.directory = []
+        if len(name) > 16:
+            raise RuntimeError(f"disk name '{name}' is too long")
+        self.name = name
+        if len(id) <= 2:
+            self.id = id + " " * (3 - len(id)) + self.layout.dos_type
+        elif len(id) > 5:
+            raise RuntimeError(f"disk id '{id}' too long")
+        else:
+            self.id = id
+
+    def add_del(self, name):
+        if len(name) > 16:
+            raise RuntimeError(f"file name '{name}' is too long")
+        self.directory.append(Disk.DirectoryEntry(name, "del", 0, 0, 0))
+    
+    def add_file(self, name, data, type="prg"):
+        if len(name) > 16:
+            raise RuntimeError(f"file name '{name}' is too long")
+        if type not in Disk.file_types:
+            raise RuntimeError(f"unknown file type '{type}'")
+        (track, sector, blocks) = self.add_file_data(data)
+        self.directory.append(Disk.DirectoryEntry(name, "prg", track, sector, blocks))
+
+    def add_block(self, track, sector, data):
+        if track <= 0 or track > self.num_tracks():
+            raise RuntimeError(f"invalid track {track}")
+        if sector < 0 or sector >= self.tracks[track].length():
+            raise RuntimeError(f"invalid sector {sector}")
+        if len(data) != 256:
+            raise RuntimeError(f"invalid block length {len(data)}")
+        if not self.tracks[track].is_free(sector):
+            raise RuntimeError(f"block {track},{sector} already used")
+        self.tracks[track].write(sector, data)
+    
+    def output(self, file):
+        self.encode_directory()
+        self.encode_bam()
+        for track in self.tracks[1:]:
+            track.output(file)
+
+    # private methods
+
+    def add_file_data(self, data):
+        blocks = [data[i:i + 254] for i in range(0, len(data), 254)]
+        (start_track, start_sector) = self.find_first_block()
+        (track, sector) = (start_track, start_sector)
+        for block in blocks[:-1]:
+            (next_track, next_sector) = self.find_next_block(track, sector)
+            if next_track is None:
+                raise RuntimeError("disk full")
+            self.add_block(track, sector, self.encode_track_sector(next_track, next_sector, block))
+            (track, sector) = (next_track, next_sector)
+        else:
+            block = blocks[-1]
+            self.add_block(track, sector, self.encode_track_sector(0, len(block) + 1, block))
+
+        return (start_track, start_sector, len(blocks))
+
+    def encode_track_sector(self, track, sector, data):
+        buffer = Buffer()
+        buffer.add_byte(track)
+        buffer.add_byte(sector)
+        buffer.add_data(data, 254)
+        return buffer.data
+
+    def find_first_block(self):
+        track = self.layout.directory_tracks[0]
+        distance = 1
+        while track - distance > 0 or track + distance <= self.num_tracks():
+            if track - distance > 0:
+                sector = self.tracks[track - distance].first_free()
+                if sector is not None:
+                    return (track - distance, sector)
+            if track + distance <= self.num_tracks():
+                sector = self.tracks[track + distance].first_free()
+                if sector is not None:
+                    return (track + distance, sector)
+            distance += 1            
+        return (None, None)
+    
+    def find_next_block(self, track, sector):
+        start_track = track
+        if track < self.layout.directory_tracks[0]:
+            direction = -1
+        else:
+            direction = 1
+        changed_direction = False
+
+        while True:
+            next_sector = self.tracks[track].next_free(sector + self.layout.interleave, sector if track == start_track else None)
+            if next_sector is not None:
+                return (track, next_sector)
+            track += direction
+            if track < 1 or track > self.num_tracks():
+                if changed_direction:
+                    return (None, None)
+                changed_direction = True
+                direction *= -1
+                track = self.layout.directory_tracks[0] + direction
+    
+    def find_first_directory_block(self):
+        if self.layout.directory_tracks[0] == 40:
+            return (self.layout.directory_tracks[0], 3)
+        else:
+            return (self.layout.directory_tracks[0], 1)
+        
+    def find_next_directory_block(self, track, sector):
+        start_track = track
+        index = self.layout.directory_tracks.index(track)
+        for index in range(self.layout.directory_tracks.index(track), len(self.layout.directory_tracks)):
+            track = self.layout.directory_tracks[index]
+            next_sector = self.tracks[track].next_free(sector + self.layout.directory_interleave, sector if track == start_track else None)
+            if next_sector is not None:
+                return (track, next_sector)
+        return None
+
+    def encode_directory(self):
+        blocks = [self.directory[i:i + 8] for i in range(0, len(self.directory), 8)]
+
+        (track, sector) = self.find_first_directory_block()
+        for block in blocks[:-1]:
+            (next_track, next_sector) = self.find_next_directory_block(track, sector)
+            if next_track is None:
+                raise RuntimeError("directory full")
+            self.encode_directory_block(track, sector, block, next_track, next_sector)
+            (track, sector) = (next_track, next_sector)
+        else:
+            self.encode_directory_block(track, sector, blocks[-1])
+    
+    def encode_directory_block(self, track, sector, entries, next_track=0, next_sector=255):
+        buffer = Buffer()
+        entries[0].encode(buffer, next_track, next_sector)
+        for entry in entries[1:]:
+            entry.encode(buffer)
+        buffer.pad(256)
+        self.add_block(track, sector, buffer.data)
+
+
+    def encode_bam(self):
+        buffer = Buffer()
+        (track, sector) = self.find_first_directory_block()
+        buffer.add_byte(track)
+        buffer.add_byte(sector)
+        buffer.add_data(self.layout.dos_type[-1].upper())
+        buffer.add_byte(self.is_double_sided())
+        if self.num_tracks() <= 70:
+            for track in self.tracks[1:36]:
+                track.encode_bam(buffer)
+        buffer.add_data(self.name, 16, 0xa0)
+        buffer.add_word(0xa0a0)
+        buffer.add_data(self.id)
+        buffer.add_word(0xa0a0)
+        if self.num_tracks() <= 70:
+            buffer.add_word(0xa0a0)
+        if self.is_double_sided():
+            buffer.pad(0xdd)
+            for track in self.tracks[36:]:
+                buffer.add_byte(track.blocks_free)
+        buffer.pad(256)
+        self.add_block(self.layout.directory_tracks[0], 0, buffer.data)
+
+        if self.is_double_sided():
+            buffer.clear()
+            for track in self.tracks[36:]:
+                track.encode_bam(buffer)
+            buffer.pad(256)
+            self.add_block(self.layout.directory_tracks[1], 0)
+        elif self.num_tracks() > 70:
+            dos_version = bytearray(self.layout.dos_type[-1].upper(), "utf-8")[0]
+            for side in range(0, 2):
+                buffer.clear()
+                if side == 0:
+                    buffer.add_byte(self.layout.directory_tracks[0])
+                    buffer.add_byte(2)
+                else:
+                    buffer.add_byte(0)
+                    buffer.add_byte(255)
+                buffer.add_byte(dos_version)
+                buffer.add_byte(dos_version ^ 0xff)
+                buffer.add_data(self.id[0:2])
+                buffer.add_byte(0xc0) # I/O byte
+                buffer.add_byte(0) # auto-boot-loader flag
+                buffer.pad(16)
+                start_track = side * 40 + 1
+                for track in self.tracks[start_track:start_track+40]:
+                    track.encode_bam(buffer, 5)
+                self.add_block(self.layout.directory_tracks[0], side + 1, buffer.data)
+
+    def is_double_sided(self):
+        return self.num_tracks() == 70
+    
+    def num_tracks(self):
+        return len(self.tracks) - 1
+    
 class CreateDisk(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Create disk image.", Script.Option.include_directories, Script.Option.dyndep)
+        super().__init__("Create disk image.", Script.Option.include_directories, Script.Option.binary_output, Script.Option.dyndep)
         self.arg_parser.add_argument("filelist")
 
     # Get filename of input file.
@@ -52,19 +391,14 @@ class CreateDisk(Script.Script):
         return self.parse_filelist(True)
 
     def execute_sub(self):
-        commands = self.parse_filelist(False)
-        c1541 = Command.Command("c1541", [], commands)
-        c1541.run()
-
-        if c1541.exit_code != 0 or len(c1541.stderr) > 0:
-            print("\n".join(c1541.stderr))
-            raise RuntimeError(f"creating disk image failed")
+        disk = self.parse_filelist()
+        disk.output(self.output_file())
 
     def parse_filelist(self, deps_only=False):
         filelist = self.input_filename()
         type = os.path.splitext(self.output_file_name())[1][1:]
 
-        commands = []
+        disk = None
         used_files = []
 
         header = True
@@ -72,26 +406,41 @@ class CreateDisk(Script.Script):
             for line in file:
                 line = line.strip()
                 if header:
-                    commands.append(f"format \"{line}\" {type} {self.output_file_name()}")
+                    if not deps_only:
+                        (name, id) = line.split(",")
+                        disk = Disk(type, name.upper(), id.upper())
                     header = False
                 else:
                     if line.startswith("c128-boot "):
                         file = self.find_file(line[9:].strip(), deps_only, deps_only)
-                        commands.append(f"bwrite \"{file}\" 1 0")
-                        used_files.append(file)
-                    elif line.startswith("bpoke "):
-                        commands.append(line)
+                        if deps_only:
+                            used_files.append(file)
+                        else:
+                            disk.add_block(1, 0, self.read_file(file))
+                    elif line.startswith("del "):
+                        name = self.convert_name(line[4:])
+                        if not deps_only:
+                            disk.add_del(name)
                     else:
                         sep = line.find(">")
                         if sep == -1:
                             raise RuntimeError(f"invalid line '{line}'")
                         file = self.find_file(line[:sep].strip(), deps_only, deps_only)
-                        name = line[sep+1:].strip()
-                        commands.append(f"write \"{file}\" \"{name}\"")
-                        used_files.append(file)
+                        name = self.convert_name(line[sep+1:])
+                        if deps_only:
+                            used_files.append(file)
+                        else:
+                            disk.add_file(name, self.read_file(file))
             if deps_only:
                 return used_files
             else:
-                return commands
+                return disk
+
+    def read_file(self, filename):
+        with open(filename, "rb") as file:
+            return file.read()
+
+    def convert_name(self, name):
+        return bytearray(name.upper().strip().strip('"'), "utf-8").replace(b'"', b"\xa0")
 
 CreateDisk().run()
