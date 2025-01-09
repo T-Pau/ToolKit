@@ -30,6 +30,7 @@ import argparse
 import enum
 import os
 import sys
+import traceback
 
 import AssemblerOutput
 import AtomicOutput
@@ -40,6 +41,7 @@ class Option(enum.Enum):
     name = enum.auto()
     alignment = enum.auto()
     assembler_output = enum.auto()
+    binary_output = enum.auto()
     section = enum.auto()
     runlength_encode = enum.auto()
     include_directories = enum.auto()
@@ -110,7 +112,7 @@ class Script:
             else:
                 self.prepare()
 
-                self.output.set_filename(self.output_filename())
+                self.output.set_filename(self.output_filename(), self.options.is_set(Option.binary_output))
                 self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
                 if not self.output.run(lambda: self.execute()):
                     sys.exit(1)

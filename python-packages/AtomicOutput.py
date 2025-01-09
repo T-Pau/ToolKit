@@ -33,15 +33,17 @@ import traceback
 
 class AtomicOutput:
     def __init__(self):
+        self.binary = False
         self.filename = None
         self.only_if_changed = False
         self.temp_name = None
         self.file = None
         self.ok = True
 
-    def set_filename(self, filename):
+    def set_filename(self, filename, binary=False):
         if self.file is not None:
             raise RuntimeError("can't change output filename after opening file")
+        self.binary = binary
         self.filename = filename
 
     def set_only_if_changed(self, value):
@@ -59,7 +61,7 @@ class AtomicOutput:
 
     def get_file(self):
         if self.file is None:
-            self.file = open(self.get_filename(), "w")
+            self.file = open(self.get_filename(), self.mode())
         return self.file
 
     def abort(self, message):
@@ -77,7 +79,7 @@ class AtomicOutput:
         if self.file is not None:
             self.file.close()
             self.file = None
-        if self.temp_name:
+        if self.temp_name and os.path.exists(self.temp_name):
             os.remove(self.temp_name)
     
     def error(self, message):
@@ -98,3 +100,11 @@ class AtomicOutput:
                 print(f"{sys.argv[0]}: {ex}", file=sys.stderr)
             self.discard()
             return False
+
+    # private methods
+
+    def mode(self):
+        if self.binary:
+            return "wb"
+        else:
+            return "w"
