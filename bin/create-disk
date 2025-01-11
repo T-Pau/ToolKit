@@ -376,7 +376,7 @@ class Disk:
     
 class CreateDisk(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Create disk image.", Script.Option.include_directories, Script.Option.binary_output, Script.Option.dyndep)
+        super().__init__("Create disk image.", Script.Option.include_directories, Script.Option.binary_output, Script.Option.dyndep, Script.Option.preprocessor)
         self.arg_parser.add_argument("filelist")
 
     # Get filename of input file.
@@ -395,16 +395,15 @@ class CreateDisk(Script.Script):
         disk.output(self.output_file())
 
     def parse_filelist(self, deps_only=False):
-        filelist = self.input_filename()
         type = os.path.splitext(self.output_file_name())[1][1:]
 
         disk = None
         used_files = []
 
         header = True
-        with open(filelist, "r") as file:
-            for line in file:
-                line = line.strip()
+        for line in self.file_reader:
+            line = line.strip()
+            try:
                 if header:
                     if not deps_only:
                         (name, id) = line.split(",")
@@ -431,10 +430,13 @@ class CreateDisk(Script.Script):
                             used_files.append(file)
                         else:
                             disk.add_file(name, self.read_file(file))
-            if deps_only:
-                return used_files
-            else:
-                return disk
+            except Exception as ex:
+                self.file_reader.error(f"{ex}")
+
+        if deps_only:
+            return used_files
+        else:
+            return disk
 
     def read_file(self, filename):
         with open(filename, "rb") as file:

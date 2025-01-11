@@ -35,6 +35,7 @@ import traceback
 import AssemblerOutput
 import AtomicOutput
 import Dependencies
+import FileReader
 import RunlengthEncoder
 
 class Option(enum.Enum):
@@ -42,17 +43,22 @@ class Option(enum.Enum):
     alignment = enum.auto()
     assembler_output = enum.auto()
     binary_output = enum.auto()
-    section = enum.auto()
-    runlength_encode = enum.auto()
-    include_directories = enum.auto()
+    defines = enum.auto()
     dyndep = enum.auto()
+    file_reader = enum.auto()
+    file_reader_preprocessor = enum.auto()
+    include_directories = enum.auto()
+    runlength_encode = enum.auto()
+    section = enum.auto()
 
     # collections
     assembler = enum.auto()
+    preprocessor = enum.auto()
     symbol = enum.auto()
 
 collection_options = {
     Option.assembler: {Option.section, Option.assembler_output},
+    Option.preprocessor: {Option.defines, Option.file_reader, Option.file_reader_preprocessor},
     Option.symbol: {Option.assembler, Option.name, Option.alignment}
 }
 
@@ -85,19 +91,28 @@ class Script:
         self.output = AtomicOutput.AtomicOutput()
         self.dependencies = None
         self.assembler = None
+        self.file_reader = None
 
-        if self.options.is_set(Option.dyndep):
-            self.arg_parser.add_argument("--dyndep", metavar="FILE", dest="dyndep", help="output dynamic dependencies to FILE.")
         if self.options.is_set(Option.alignment):
             if self.natural_alignment() is not None:
                 self.arg_parser.add_argument("--align", const=self.natural_alignment(), action="store_const", dest="alignment", help=f"align to {self.natural_alignment()}")
             self.arg_parser.add_argument("-a", "--alignment", default=None, metavar="ALIGNMENT", dest="alignment", help="align to ALIGNMENT")
+
+        if self.options.is_set(Option.defines):
+            self.arg_parser.add_argument("-D", action="append", dest="defines")
+
+        if self.options.is_set(Option.dyndep):
+            self.arg_parser.add_argument("--dyndep", metavar="FILE", dest="dyndep", help="output dynamic dependencies to FILE.")
+
         if self.options.is_set(Option.include_directories):
             self.arg_parser.add_argument("-I", metavar="DIRECTORY", dest="include_directories", default=[], action="append", help="search for files in DIRECTORY")
+
         if self.options.is_set(Option.name):
             self.arg_parser.add_argument("-n", "--name", metavar="NAME", dest="name", help="define symbol NAME")
+
         if self.options.is_set(Option.runlength_encode):
             self.arg_parser.add_argument("-r", "--runlength", dest="runlength", action="store_true", help="runlength encode data")
+
         if self.options.is_set(Option.section):
             self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", default="data", help="put in SECTION")
 
@@ -243,7 +258,17 @@ class Script:
             self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.input_filename())
             self.assembler.section(self.args.section)
+        if self.options.is_set(Option.file_reader):
+            preprocess = self.options.is_set(Option.file_reader_preprocessor)
+            if preprocess and self.options.is_set(Option.defines):
+                defines = self.args.defines
+            else:
+                defines = {}
+            self.file_reader = FileReader.FileReader(self, self.input_filename(), preprocess=preprocess, defines=defines)
         self.execute_sub()
+        if self.file_reader is not None:
+            if not self.file_reader.ok:            
+                self.output.fail()
         self.dependencies.write()
         self.dependencies.check()
     

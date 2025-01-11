@@ -64,6 +64,9 @@ class AtomicOutput:
             self.file = open(self.get_filename(), self.mode())
         return self.file
 
+    def fail(self):
+        self.ok = False
+
     def abort(self, message):
         print(f"{sys.argv[0]}: {message}", file=sys.stderr)
         self.discard()
@@ -84,7 +87,7 @@ class AtomicOutput:
     
     def error(self, message):
         print(message, file=sys.stderr)
-        self.ok = False
+        self.fail()
 
     def run(self, code):
         try:
