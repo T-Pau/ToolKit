@@ -29,6 +29,9 @@ import sys
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+import os
+import traceback
+
 class FileReader:
     class Source:
         def __init__(self, filename):
@@ -82,6 +85,10 @@ class FileReader:
         print(message, file=sys.stderr)
 
     def error(self, message):
+        if isinstance(message, BaseException):
+            if "TOOLKIT_DEBUG" in os.environ:
+                traceback.print_exception(message)
+            message = str(message)
         self.message("error: " + message)
         self.fail()
     

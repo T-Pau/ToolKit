@@ -258,6 +258,24 @@ class Script:
             self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.input_filename())
             self.assembler.section(self.args.section)
+        self.common_preparations()
+        self.execute_sub()
+        if self.file_reader is not None and not self.file_reader.ok:            
+            self.output.fail()
+        self.dependencies.write()
+        self.dependencies.check()
+    
+    def create_dyndep(self):
+        self.common_preparations()
+        dependencies = self.get_dynamic_dependencies()
+        if self.file_reader is not None and not self.file_reader.ok:            
+            self.output.fail()
+        # TODO: quote spaces &c
+        dependencies_string = " ".join(dependencies)
+        print("ninja_dyndep_version = 1", file=self.output_file())
+        print(f"build {self.output_filename()} : dyndep | {dependencies_string}", file=self.output_file())
+
+    def common_preparations(self):
         if self.options.is_set(Option.file_reader):
             preprocess = self.options.is_set(Option.file_reader_preprocessor)
             if preprocess and self.options.is_set(Option.defines):
@@ -265,16 +283,3 @@ class Script:
             else:
                 defines = {}
             self.file_reader = FileReader.FileReader(self, self.input_filename(), preprocess=preprocess, defines=defines)
-        self.execute_sub()
-        if self.file_reader is not None:
-            if not self.file_reader.ok:            
-                self.output.fail()
-        self.dependencies.write()
-        self.dependencies.check()
-    
-    def create_dyndep(self):
-        dependencies = self.get_dynamic_dependencies()
-        # TODO: quote spaces &c
-        dependencies_string = " ".join(dependencies)
-        print("ninja_dyndep_version = 1", file=self.output_file())
-        print(f"build {self.output_filename()} : dyndep | {dependencies_string}", file=self.output_file())

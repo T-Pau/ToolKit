@@ -32,6 +32,7 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
 
+import CharacterMapping
 import Command
 import Script
 
@@ -171,7 +172,7 @@ class Disk:
         "usr": 0x84
     }
 
-    def __init__(self, type, name, id):
+    def __init__(self, type, name="", id=""):
         if type not in Disk.layouts:
             raise RuntimeError(f"unknown disk type '{type}'")
         self.layout = Disk.layouts[type]
@@ -180,6 +181,11 @@ class Disk:
             for track in range(zone.tracks):
                 self.tracks.append(Disk.Track(zone.sectors))
         self.directory = []
+        self.name = ""
+        self.id = ""
+        self.set_name(name, id)
+
+    def set_name(self, name, id):
         if len(name) > 16:
             raise RuntimeError(f"disk name '{name}' is too long")
         self.name = name
@@ -189,6 +195,7 @@ class Disk:
             raise RuntimeError(f"disk id '{id}' too long")
         else:
             self.id = id
+
 
     def add_del(self, name):
         if len(name) > 16:
@@ -378,6 +385,8 @@ class CreateDisk(Script.Script):
     def __init__(self) -> None:
         super().__init__("Create disk image.", Script.Option.include_directories, Script.Option.binary_output, Script.Option.dyndep, Script.Option.preprocessor)
         self.arg_parser.add_argument("filelist")
+        self.character_mapping = CharacterMapping.CharacterMapping.petscii()
+        self.character_mapping.add_single('"', 0xa0)
 
     # Get filename of input file.
     def input_filename(self):
@@ -397,41 +406,50 @@ class CreateDisk(Script.Script):
     def parse_filelist(self, deps_only=False):
         type = os.path.splitext(self.output_file_name())[1][1:]
 
-        disk = None
+        if not deps_only:
+            disk = Disk(type)
         used_files = []
 
-        header = True
         for line in self.file_reader:
             line = line.strip()
+            if line == "":
+                continue
             try:
-                if header:
-                    if not deps_only:
-                        (name, id) = line.split(",")
-                        disk = Disk(type, name.upper(), id.upper())
-                    header = False
+                parts = line.split(" ", 1)
+                command = parts[0]
+                if len(parts) == 1:
+                    arguments = ""
                 else:
-                    if line.startswith("c128-boot "):
-                        file = self.find_file(line[9:].strip(), deps_only, deps_only)
-                        if deps_only:
-                            used_files.append(file)
-                        else:
-                            disk.add_block(1, 0, self.read_file(file))
-                    elif line.startswith("del "):
-                        name = self.convert_name(line[4:])
-                        if not deps_only:
-                            disk.add_del(name)
+                    arguments = parts[1]
+
+                if command == "name":
+                    if not deps_only:
+                        (name, id) = arguments.split(",")
+                        disk.set_name(self.convert_name(name), self.convert_name(id))
+                elif command == "c128-boot":
+                    file = self.find_file(arguments.strip(), deps_only, deps_only)
+                    if deps_only:
+                        used_files.append(file)
                     else:
-                        sep = line.find(">")
-                        if sep == -1:
-                            raise RuntimeError(f"invalid line '{line}'")
-                        file = self.find_file(line[:sep].strip(), deps_only, deps_only)
-                        name = self.convert_name(line[sep+1:])
-                        if deps_only:
-                            used_files.append(file)
-                        else:
-                            disk.add_file(name, self.read_file(file))
+                        disk.add_block(1, 0, self.read_file(file))
+                elif command == "del":
+                    if not deps_only:
+                        disk.add_del(self.convert_name(arguments))
+                elif command == "file":
+                    sep = arguments.find("<")
+                    if sep == -1:
+                        raise RuntimeError(f"invalid file command '{arguments}'")
+                    file = self.find_file(arguments[sep+1:].strip(), deps_only, deps_only)
+                    if deps_only:
+                        used_files.append(file)
+                    else:
+                        disk.add_file(self.convert_name(arguments[:sep]), self.read_file(file))
+                elif command == "map":
+                    self.character_mapping.add_mapping(arguments)
+                else:
+                    raise RuntimeError(f"invalid command {command}")
             except Exception as ex:
-                self.file_reader.error(f"{ex}")
+                self.file_reader.error(ex)
 
         if deps_only:
             return used_files
@@ -443,6 +461,6 @@ class CreateDisk(Script.Script):
             return file.read()
 
     def convert_name(self, name):
-        return bytearray(name.upper().strip().strip('"'), "utf-8").replace(b'"', b"\xa0")
+        return self.character_mapping.encode(name.strip().strip('"'))
 
 CreateDisk().run()
