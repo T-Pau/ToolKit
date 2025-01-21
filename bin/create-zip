@@ -39,43 +39,64 @@ import Script
 
 class CreateZip(Script.Script):
     def __init__(self) -> None:
-        super().__init__("Convert sprite image.")
-        self.arg_parser.add_argument("archive")
-        self.arg_parser.add_argument("files", nargs="+")
-        self.arg_parser.add_argument("--strip", metavar="DIRECTORY", action="append", help="strip DIRECTORY from file names")
+        super().__init__("Create zip archive.", Script.Option.include_directories, Script.Option.dyndep, Script.Option.preprocessor)
+        self.arg_parser.add_argument("filelist")
 
     # Get filename of input file.
     def input_filename(self):
-        return self.args.archive
+        return self.args.filelist
     
     # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
     def default_output_extension(self):
         return "zip"
 
+    def get_dynamic_dependencies(self):
+        return self.parse_filelist(True)
+
     def execute_sub(self):
-        zip = zipfile.ZipFile(self.output_filename(), "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
+        self.parse_filelist(False)
+    
+    def parse_filelist(self, dyndeps=False):
+        if dyndeps:
+            used_files = []
+        else:
+            zip = zipfile.ZipFile(self.output_filename(), "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
 
-        for file in self.args.files:
-            name = file
-            for strip in self.args.strip:
-                if file.startswith(strip + "/"):
-                    name = file[len(strip) + 1:]
-                    break
-                
-            if os.path.isdir(file):
-                for dir, subdirs, subfiles in os.walk(file):
-                    for subfile in subfiles:
-                        subdir = dir[len(file) + 1:]
-                        full_file = os.path.join(dir, subfile)
-                        full_name = os.path.join(name, subdir, subfile)
-                        self.dependencies.add(full_file)
-                        zip.write(full_file, arcname=full_name)
+        for line in self.file_reader:
+            line = line.strip()
+            if line == "":
+                continue
+            try:
+                sep = line.find("<")
+                if sep == -1:
+                    file = line
+                    name = line
+                else:
+                    name = line[:sep-1].strip()
+                    file = line[sep+1:].strip()
 
+                file = self.find_file(file, dyndeps, dyndeps)
+                if dyndeps:
+                    used_files.append(file)
+                else:
+                    if os.path.isdir(file):
+                        for dir, subdirs, subfiles in os.walk(file):
+                            for subfile in subfiles:
+                                subdir = dir[len(file) + 1:]
+                                full_file = os.path.join(dir, subfile)
+                                full_name = os.path.join(name, subdir, subfile)
+                                self.dependencies.add(full_file)
+                                zip.write(full_file, arcname=full_name)
+                    else:
+                        self.dependencies.add(file)
+                        zip.write(file, arcname=name)
+            except Exception as ex:
+                self.file_reader.error(ex)
+            
+        if dyndeps:
+            return used_files
+        else:
+            zip.close()
 
-            else:
-                self.dependencies.add(file)
-                zip.write(file, arcname=name)
-
-        zip.close()
 
 CreateZip().run()
