@@ -75,7 +75,7 @@ class CreateZip(Script.Script):
                     name = line[:sep-1].strip()
                     file = line[sep+1:].strip()
 
-                file = self.find_file(file, dyndeps, dyndeps)
+                file = self.find_file(file)
                 if dyndeps:
                     used_files.append(file)
                 else:

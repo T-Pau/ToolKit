@@ -92,6 +92,8 @@ class Script:
         self.dependencies = None
         self.assembler = None
         self.file_reader = None
+        self.dyndep_mode = False
+        self.built_files = set()
 
         if self.options.is_set(Option.alignment):
             if self.natural_alignment() is not None:
@@ -103,6 +105,7 @@ class Script:
 
         if self.options.is_set(Option.dyndep):
             self.arg_parser.add_argument("--dyndep", metavar="FILE", dest="dyndep", help="output dynamic dependencies to FILE.")
+            self.arg_parser.add_argument("--built-files", metavar="FILE", dest="built_files", help="read list of built files from FILE.")
 
         if self.options.is_set(Option.include_directories):
             self.arg_parser.add_argument("-I", metavar="DIRECTORY", dest="include_directories", default=[], action="append", help="search for files in DIRECTORY")
@@ -121,7 +124,9 @@ class Script:
             self.args = self.arg_parser.parse_args()
 
             if self.options.is_set(Option.dyndep) and self.args.dyndep:
+                self.dyndep_mode = True
                 self.output.set_filename(self.args.dyndep)
+                self.read_built_files()
                 if not self.output.run(lambda: self.create_dyndep()):
                     sys.exit(1)
             else:
@@ -154,26 +159,28 @@ class Script:
         self.output.error(message)
 
     # Find FILE.
-    def find_file(self, file, optional=False, dyndep=False):
-        if not os.path.exists(file):
+    def find_file(self, file, optional=False):
+        search_include_directories = not (os.path.isabs(file) or file.startswith("./"))
+        file = os.path.normpath(file)
+        found = False
+        if not search_include_directories:
+            found = os.path.exists(file)
+        else:
             found = False
             relative_directories = []
             if self.input_filename() is not None:
                 relative_directories = [os.path.dirname(self.input_filename())]
             for directory in relative_directories + self.args.include_directories:
-                new_file = os.path.join(directory, file)
-                if os.path.exists(new_file):
+                new_file = os.path.normpath(os.path.join(directory, file))
+                if self.file_exists(new_file):
                     file = new_file
                     found = True
                     break
-            if not found:
-                if optional:
-                    if not dyndep:
-                        return None
-                    else:
-                        return os.path.join(os.path.dirname(self.output_file_name()), file)
-                else:
-                    raise RuntimeError(f"can't find file '{file}'")
+        if not found:
+            if optional:
+                return None
+            else:
+                raise RuntimeError(f"can't find file '{file}'")
         self.add_dependency(file)
         return file
 
@@ -283,3 +290,13 @@ class Script:
             else:
                 defines = {}
             self.file_reader = FileReader.FileReader(self, self.input_filename(), preprocess=preprocess, defines=defines)
+
+    def read_built_files(self):
+        for line in open(self.find_file(self.args.built_files), "r"):
+            self.built_files.add(line.rstrip("\n"))
+
+    def file_exists(self, file):
+        if file in self.built_files:
+            return True
+        else:
+            return os.path.exists(file)

@@ -25,14 +25,14 @@ rule create-disk
     depfile = $out.d
 
 rule create-disk-dyndep
-    command = {{$bin_directory/create-disk}} $flags -o $output --dyndep $out $in
+    command = {{$bin_directory/create-disk}} $flags -o $output --built-files $top_build_directory/built-files --dyndep $out $in
 
 rule create-zip
     command = {{$bin_directory/create-zip}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
 rule create-zip-dyndep
-    command = {{$bin_directory/create-zip}} $flags -o $output --dyndep $out $in
+    command = {{$bin_directory/create-zip}} $flags -o $output --built-files $top_build_directory/built-files --dyndep $out $in
 
 rule convert-image
     command = {{$bin_directory/convert-image}} -M $depfile $flags -o $out $in

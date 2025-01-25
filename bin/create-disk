@@ -353,7 +353,7 @@ class Disk:
             for track in self.tracks[36:]:
                 track.encode_bam(buffer)
             buffer.pad(256)
-            self.add_block(self.layout.directory_tracks[1], 0)
+            self.add_block(self.layout.directory_tracks[1], 0, buffer.data)
         elif self.num_tracks() > 70:
             dos_version = bytearray(self.layout.dos_type[-1].upper(), "utf-8")[0]
             for side in range(0, 2):
@@ -427,7 +427,7 @@ class CreateDisk(Script.Script):
                         (name, id) = arguments.split(",")
                         disk.set_name(self.convert_name(name), self.convert_name(id))
                 elif command == "c128-boot":
-                    file = self.find_file(arguments.strip(), deps_only, deps_only)
+                    file = self.find_file(arguments.strip())
                     if deps_only:
                         used_files.append(file)
                     else:
@@ -439,7 +439,7 @@ class CreateDisk(Script.Script):
                     sep = arguments.find("<")
                     if sep == -1:
                         raise RuntimeError(f"invalid file command '{arguments}'")
-                    file = self.find_file(arguments[sep+1:].strip(), deps_only, deps_only)
+                    file = self.find_file(arguments[sep+1:].strip())
                     if deps_only:
                         used_files.append(file)
                     else:
