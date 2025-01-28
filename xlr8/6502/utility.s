@@ -61,6 +61,13 @@
     sta address + 1
 }
 
+.public .macro copy_word destination, source {
+    lda source
+    sta destination
+    lda source + 1
+    sta destination + 1
+}
+
 .public .macro add_word address, value {
     clc
     lda address
