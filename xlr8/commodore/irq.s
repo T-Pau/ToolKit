@@ -173,6 +173,12 @@ lines_per_frame .reserve 1
 .public restore_irq {
     php
     sei
+    lda IRQ_VECTOR
+    cmp #<irq_main
+    bne end
+    lda IRQ_VECTOR + 1
+    cmp #>irq_main
+    bne end
     .if .defined(USE_VICII) {
         ; enable cia 1 interrupts
         lda #$81
@@ -186,6 +192,7 @@ lines_per_frame .reserve 1
     sta IRQ_VECTOR
     lda kernal_irq + 1
     sta IRQ_VECTOR + 1
+end:    
     plp
     rts
 }
