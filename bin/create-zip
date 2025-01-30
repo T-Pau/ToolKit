@@ -41,6 +41,7 @@ class CreateZip(Script.Script):
     def __init__(self) -> None:
         super().__init__("Create zip archive.", Script.Option.include_directories, Script.Option.dyndep, Script.Option.preprocessor)
         self.arg_parser.add_argument("filelist")
+        self.arg_parser.add_argument("--contain", dest="contain", action="store_true", help="contain all files in directory named after output file")
 
     # Get filename of input file.
     def input_filename(self):
@@ -57,6 +58,9 @@ class CreateZip(Script.Script):
         self.parse_filelist(False)
     
     def parse_filelist(self, dyndeps=False):
+        root_directory = ""
+        if self.args.contain:
+            root_directory = os.path.splitext(os.path.basename(self.output_file_name()))[0]
         if dyndeps:
             used_files = []
         else:
@@ -84,12 +88,12 @@ class CreateZip(Script.Script):
                             for subfile in subfiles:
                                 subdir = dir[len(file) + 1:]
                                 full_file = os.path.join(dir, subfile)
-                                full_name = os.path.join(name, subdir, subfile)
+                                full_name = os.path.join(root_directory, name, subdir, subfile)
                                 self.dependencies.add(full_file)
                                 zip.write(full_file, arcname=full_name)
                     else:
                         self.dependencies.add(file)
-                        zip.write(file, arcname=name)
+                        zip.write(file, arcname=os.path.join(root_directory, name))
             except Exception as ex:
                 self.file_reader.error(ex)
             
