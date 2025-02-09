@@ -12,6 +12,10 @@ rule convert-characters
     command = {{$bin_directory/convert-characters}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
+rule convert-markdown
+    command = {{$bin_directory/convert-markdown}} -M $depfile -o $out $in
+    depfile = $out.d
+
 rule convert-screens
     command = {{$bin_directory/convert-screens}} -M $depfile $flags -o $out $in
     depfile = $out.d

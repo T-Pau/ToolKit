@@ -29,6 +29,7 @@
 import argparse
 import enum
 import os
+import re
 import sys
 import traceback
 
@@ -160,7 +161,7 @@ class Script:
 
     # Find FILE.
     def find_file(self, file, optional=False):
-        search_include_directories = not (os.path.isabs(file) or file.startswith("./"))
+        search_include_directories = not (os.path.isabs(file) or file.startswith("./")) and self.options.is_set(Option.include_directories)
         file = os.path.normpath(file)
         found = False
         if not search_include_directories:
@@ -278,7 +279,8 @@ class Script:
         if self.file_reader is not None and not self.file_reader.ok:            
             self.output.fail()
         # TODO: quote spaces &c
-        dependencies_string = " ".join(dependencies)
+        quoted_dependencies = [re.sub(r'([ :\n$])', r'$\1', s) for s in dependencies]
+        dependencies_string = " ".join(quoted_dependencies)
         print("ninja_dyndep_version = 1", file=self.output_file())
         print(f"build {self.output_filename()} : dyndep | {dependencies_string}", file=self.output_file())
 
