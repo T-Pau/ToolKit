@@ -116,9 +116,10 @@ lines_per_frame .reserve 1
     php
     sei
     .if .defined(USE_VICII) {
-        ; disable cia 1 interrupts
+        ; disable cia 1 interrupts, acknowledge potential pending interrupt
         lda #$7f
         sta CIA1_INTERRUPT
+        lda CIA1_INTERRUPT
         ; enable rasterline irq
         lda #1
         sta VIC_INTERRUPT_MASK
