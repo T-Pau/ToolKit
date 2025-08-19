@@ -56,7 +56,7 @@ class CRT:
     types = {
         "EasyFlash": Type(CartridgeType.EASYFLASH, Computer.C64, game=True),
         "Magic Desk": Type(CartridgeType.MAGIC_DESK, Computer.C64, exrom=True),
-        "Magic Desk C128": Type(CartridgeType.MAGIC_DESK_C128, Computer.C128),
+        "Magic Desk C128": Type(CartridgeType.MAGIC_DESK_C128, Computer.C128, exrom=True, game=True),
         "Magic Desk C264": Type(CartridgeType.MAGIC_DESK_C264, Computer.PLUS4)
     }
 
