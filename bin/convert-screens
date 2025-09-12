@@ -44,7 +44,7 @@ class ConvertScreens(Script.Script):
 
 
    def execute_sub(self):
-      screens = Screens.Screens(self.dependencies, defines=self.args.defines, include_directories=self.args.include_directories)
+      screens = Screens.Screens(self.dependencies, defines=self.args.defines, include_directories=self.args.include_directories, assembler=self.assembler)
       if not screens.convert(self.input_filename(), self.output_file()):
          raise RuntimeError()
 

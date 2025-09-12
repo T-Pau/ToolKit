@@ -41,8 +41,51 @@ class PageMode(enum.Enum):
     OBJECTS = "objects"
     PAGES = "pages"
 
-map_chars = r"'(.)'(?:-'(.)')?"
-map_codes = r"\$([0-9a-fA-F]*)(?:-\$([0-9a-fA-F]*))?"
+
+class MapParser:
+    hex_chars = r"^\$([0-9A-Fa-f]+)"
+
+    def __init__(self, line:str) -> None:
+        self.arguments = line[3:].strip()
+        self.parse()
+
+    def parse(self):
+        self.start = self.get_source()
+        if self.arguments[0] == "-":
+            self.eat(1)
+            self.end = self.get_source()
+        else:
+            self.end = self.start
+        if self.arguments[0] != " ":
+            raise RuntimeError("expected ' '")
+        self.eat_space()
+        self.target = self.get_hex()
+    
+    def get_source(self) -> int:
+        if self.arguments[0] == "'":
+            if self.arguments[2] != "'":
+                raise RuntimeError("multi-char source") # TODO: better message
+            source = ord(self.arguments[1])
+            self.eat(3)
+        elif self.arguments[0] == "$":
+            source = self.get_hex()
+        else:
+            raise RuntimeError("invalid mapping source")
+        return source
+    
+    def eat(self, length) -> None:
+        self.arguments = self.arguments[length:]
+
+    def eat_space(self) -> None:
+        self.arguments = self.arguments.lstrip()
+
+    def get_hex(self) -> int:
+        match = re.match(self.hex_chars, self.arguments)
+        if not match:
+            raise RuntimeError(f"invalid hex number '{self.arguments}'")
+        value = int(match.group(1), 16)
+        self.eat(len(match.group(0)))
+        return value
 
 class ExpressionParser:
     def __init__(self, defines):
@@ -112,7 +155,7 @@ class Source:
 
 
 class Screens:
-    def __init__(self, dependencies, options=None, defines=None, include_directories=None, images=None, assembler_output=None):
+    def __init__(self, dependencies, options=None, defines=None, include_directories=None, images=None, assembler=None):
         self.name = ""
         self.title_length = 0
         self.title_xor = 0
@@ -127,6 +170,7 @@ class Screens:
         self.images = images or []
         self.image_padding_left = b""
         self.image_padding_right = b""
+        self.runlength_encode = True
 
         self.dependencies = dependencies
         self.encoder = RunlengthEncoder.RunlengthEncoder()
@@ -135,13 +179,14 @@ class Screens:
         self.screen_names = []
         self.current_line = 0
         self.current_title = b""
+        self.current_screen = b""
         self.current_name = None
         self.ignore_empty_line = False
         self.showing = [True]
         self.files = []
         self.input_file = ""
         self.ok = True
-        self.assembler_output = assembler_output
+        self.assembler = assembler
 
         if options is not None:
             self.set_options(options)
@@ -287,6 +332,8 @@ class Screens:
         elif line.startswith(".define "):
             self.add_define(line[8:])
         elif line.startswith(".skip "):
+            if not self.runlength_encode:
+                raise RuntimeError(".skip requires runlength encoding")
             self.encoder.skip(int(line.split(" ")[1]))
         else:
             self.error(f"invalid dot directive '{line}'")
@@ -303,10 +350,12 @@ class Screens:
     def process_preamble_line(self, line):
         if line.startswith(";") or line == "":
             return
-        elif line.startswith("prefix"):
+        elif line.startswith("prefix "):
             self.prefix = self.parse_fix(line)
-        elif line.startswith("postfix"):
+        elif line.startswith("postfix "):
             self.postfix = self.parse_fix(line)
+        elif line.startswith("map "):
+            self.parse_map(line)
         else:
             words = line.split(" ")
             if words[0] == "image_padding_left":
@@ -319,12 +368,17 @@ class Screens:
                 self.line_skip = int(words[1])
             elif words[0] == "lines":
                 self.lines = int(words[1])
-            elif words[0] == "map":
-                self.add_map(words[1], words[2])
             elif words[0] == "name":
                 self.name = words[1]
             elif words[0] == "page_mode":
                 self.page_mode = PageMode(words[1])
+            elif words[0] == "runlength_encode":
+                if words[1] == "no":
+                    self.runlength_encode = False
+                elif words[1] == "yes":
+                    self.runlength_encode = True
+                else:
+                    self.error("invalid runlength_encode option, use 'yes' or 'no'")
             elif words[0] == "title_length":
                 self.title_length = int(words[1])
             elif words[0] == "title_xor":
@@ -343,7 +397,11 @@ class Screens:
                 if len(line) > self.title_length:
                     self.error(f"title too long: '{line}'")
                 self.add_string(line, self.title_length, self.title_xor)
-                self.current_title = self.encoder.end()
+                if self.runlength_encode:
+                    self.current_title = self.encoder.end()
+                else:
+                    self.current_title = self.current_screen
+                    self.current_screen = b""
                 self.ignore_empty_line = True
                 return
             elif self.page_mode == PageMode.OBJECTS and self.current_name is None:
@@ -380,54 +438,45 @@ class Screens:
             self.error(f"too many lines in screen")
         if self.current_line > 1 and self.line_skip > 0:
             self.encoder.skip(self.line_skip)
-        self.encoder.add_bytes(self.prefix)
+        self.add_bytes(self.prefix)
         self.add_string(line, self.line_length)
-        self.encoder.add_bytes(self.postfix)
+        self.add_bytes(self.postfix)
 
     def end_screen(self):
         if self.current_title != b"" or self.current_line > 0:
             while self.current_line < self.lines:
                 self.add_line("")
-            self.compressed_screens.append(self.current_title + self.encoder.end())
+            if self.runlength_encode:
+                self.compressed_screens.append(self.current_title + self.encoder.end())
+            else:
+                self.compressed_screens.append(self.current_title + self.current_screen)
             self.current_title = b""
             self.current_line = 0
             if self.page_mode == PageMode.OBJECTS:
                 self.screen_names.append(self.current_name)
             self.ignore_empty_line = False
             self.current_name = None
+            self.current_screen = b""
 
     def end(self):
         self.end_screen()
 
-    def add_map(self, source_string, target_string):
-        match = re.search(map_chars, source_string)
-        if match:
-            source_range = [ord(match.group(1)[0])]
-            end = match.group(2)
-            if end is not None:
-                source_range.append(ord(end[0]))
-        else:
-            match = re.search(map_codes, source_string)
-            if match:
-                source_range = [int("0x" + match.group(1), 0)]
-                end = match.group(2)
-                if end is not None:
-                    source_range.append(int("0x" + end, 0))
-            else:
-                raise RuntimeError(f"invalid map source {source_string}")
-        if len(source_range) == 1:
-            source_range.append(source_range[0])
-        target = int(target_string.replace("$", "0x"), 0)
-
-        for source in range(source_range[0], source_range[1] + 1):
+    def parse_map(self, line):
+        parser = MapParser(line)
+    
+        target = parser.target
+        for source in range(parser.start, parser.end + 1):
             self.charmap[source] = target
             target += 1
 
     def add_bytes(self, string):
-        self.encoder.add_bytes(string)
+        if self.runlength_encode:
+            self.encoder.add_bytes(string)
+        else:
+            self.current_screen += string
 
     def add_string(self, string, length, byte_xor=0):
-        self.encoder.add_bytes(self.map_string(string.ljust(length), byte_xor))
+        self.add_bytes(self.map_string(string.ljust(length), byte_xor))
 
     def map_string(self, string, byte_xor=0):
         result = b""
@@ -472,8 +521,8 @@ class Screens:
                 self.title_xor = value
 
     def write_output(self, output_file):
-        if self.assembler_output is not None:
-            output = self.assembler_output
+        if self.assembler is not None:
+            output = self.assembler
         else:
             output = AssemblerOutput.AssemblerOutput(output_file)
             output.header(self.input_file)
