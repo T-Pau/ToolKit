@@ -1,3 +1,4 @@
+from copy import copy
 from PIL import Image
 
 """
@@ -34,10 +35,12 @@ PixelSize = namedtuple("PixelSize", "x y")
 
 class PaletteImage:
     def __init__(self, filename, palette, pixel_size=PixelSize(1,1)):
-        self.palette = palette
+        self.palette = copy(palette)
         self.filename = filename
         self.pixel_size = pixel_size
         self.image = Image.open(filename)
+        if pixel_size.x < 1 or pixel_size.y < 1:
+            raise RuntimeError(f"invalid pixel size {pixel_size} at {self.filename}")
         if self.image.width % self.pixel_size.x != 0:
             raise RuntimeError(f"image width {self.image.width} is not multiple of pixel size {self.pixel_size.x} at {self.filename}")
         if self.image.width % self.pixel_size.x != 0:

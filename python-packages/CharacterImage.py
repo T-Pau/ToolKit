@@ -26,28 +26,36 @@
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+from copy import copy
 
+from Palette import Palette
 import PaletteImage
 
 
 class CharacterImage:
-    palette = {
+    default_palette = Palette({
         0x00000000: 1,
         0x00ffffff: 0,
         0xff000000: 0,
         0x80000000: 0,
-        0x0040ff40: -1
-    }
+        0x0040ff40: None,
+    })
 
-    def __init__(self, filename, character_width, character_height, additional_palette=None, pixel_size=PaletteImage.PixelSize(1, 1)):
-        if additional_palette is not None:
-            for color, index in additional_palette.items():
-                self.palette[color] = index
+    def __init__(self, filename, character_width, character_height, palette=None, additional_palette=None, pixel_size=PaletteImage.PixelSize(1, 1)):
+        if palette is None:
+            palette = self.default_palette
+        else:
+            self.palette = copy(palette)
+        self.palette.add_colors(additional_palette)
+        self.pixel_width = palette.bit_length()
         self.image = PaletteImage.PaletteImage(filename, self.palette, pixel_size)
         self.character_width = character_width
         self.character_height = character_height
-        if self.character_width % 8 != 0:
-            raise RuntimeError("character width not multiple of 8")
+        if self.pixel_width not in (1, 2, 4, 8):
+            raise RuntimeError(f"unsupported pixel width {self.pixel_width}")
+        if self.character_width % (8/self.pixel_width) != 0:
+            raise RuntimeError("character doesn't fit into bytes evenly")
+        self.pixels_per_byte = 8 // self.pixel_width
         if self.image.width % self.character_width != 0:
             raise RuntimeError(f"image width not multiple of character width")
         if self.image.height % self.character_height != 0:
@@ -55,7 +63,7 @@ class CharacterImage:
         self.width = self.image.width // self.character_width
         self.height = self.image.height // self.character_height
         self.count = self.width * self.height
-        self.character_size = self.character_width // 8 * self.character_height
+        self.character_size = self.character_width // self.pixels_per_byte * self.character_height
         self.cache = {}
 
     def get(self, index):
@@ -71,21 +79,19 @@ class CharacterImage:
         y *= self.character_height
         x *= self.character_width
         value = b""
-        i = 0
         got_pixel = False
         got_hole = False
         for yy in range(y, y + self.character_height):
-            for xx in range(x, x + self.character_width, 8):
+            for xx in range(x, x + self.character_width, self.pixels_per_byte):
                 byte = 0
-                for bit in range(0, 8):
-                    pixel = self.image.get(xx + bit, yy)
-                    if pixel == -1:
+                for pixel in range(0, self.pixels_per_byte):
+                    color = self.image.get(xx + pixel, yy)
+                    if color is None:
                         got_hole = True
                     else:
                         got_pixel = True
-                        byte |= self.image.get(xx + bit, yy) << (7 - bit)
+                        byte |= self.image.get(xx + pixel, yy) << (8 - (pixel + 1) * self.pixel_width)
                 value += byte.to_bytes(1, byteorder="little")
-                i += 1
         if got_hole:
             if got_pixel:
                 raise RuntimeError("partial hole at {x}, {y}")

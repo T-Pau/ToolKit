@@ -73,9 +73,9 @@ class Charset:
 
     def get_next_index(self):
         while self.next_index in self.by_index:
-            self.next_index += 1
-            if self.next_index >= self.size:
+            if self.next_index >= self.size - 1:
                 raise RuntimeError("out of characters")
+            self.next_index += 1
         return self.next_index
 
     def get_next_index_pair(self, offset):

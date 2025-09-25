@@ -28,6 +28,7 @@
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+from operator import index
 import os
 import sys
 
@@ -43,6 +44,7 @@ import PaletteImage
 import RunlengthEncoder
 import Screens
 import Script
+from Palette import Palette
 
 class Inverted(enum.Enum):
     NONE = "none"
@@ -53,52 +55,71 @@ class Inverted(enum.Enum):
 
 class Spec:
     @staticmethod
-    def decode(yaml, key, default_value=None):
+    def decode(yaml, key, default_value=None, required=False):
         if yaml is not None and key in yaml:
             return yaml[key]
         else:
+            if required:
+                raise RuntimeError(f"missing required directive '{key}'")
             return default_value
 
     class Charset:
-        def __init__(self, yaml_spec):
+        def __init__(self, yaml_spec, spec):
             self.align = Spec.decode(yaml_spec, "align")
             self.count = Spec.decode(yaml_spec, "count", 256)
             self.height = Spec.decode(yaml_spec, "height", 8)
-            self.name = Spec.decode(yaml_spec, "name")
+            self.name = Spec.decode(yaml_spec, "name", required=True)
             self.predefined = Spec.decode(yaml_spec, "predefined", {})
             self.rl_encode = Spec.decode(yaml_spec, "rl-encode", False)
+            self.section = Spec.decode(yaml_spec, "section", spec.section)
             self.width = Spec.decode(yaml_spec, "width", 8)
 
             if self.rl_encode:
                 self.align = None
 
+    class Characters:
+        def __init__(self, yaml_spec):
+            self.additional_palette = Spec.decode(yaml_spec, "additional-palette")
+            self.charset = Spec.decode(yaml_spec, "charset", 0)
+            if type(self.charset) is not int:
+                raise RuntimeError("charset must be integer")
+            self.char_size_x = Spec.decode(yaml_spec, "char-size-x", 1)
+            self.char_size_y = Spec.decode(yaml_spec, "char-size-y", 1)
+            self.file = Spec.decode(yaml_spec, "file", required=True)
+            self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
+            self.offset = Spec.decode(yaml_spec, "offset", 0)
+            self.palette = Spec.decode(yaml_spec, "palette")
+            pixel_size_x = Spec.decode(yaml_spec, "pixel-size-x", 1)
+            pixel_size_y = Spec.decode(yaml_spec, "pixel-size-y", 1)
+            self.pixel_size = PaletteImage.PixelSize(pixel_size_x, pixel_size_y)
+
     class Image:
         def __init__(self, yaml_spec, spec):
+            self.additional_palette = Spec.decode(yaml_spec, "additional-palette")
+            self.align = Spec.decode(yaml_spec, "align")
             self.charset = Spec.decode(yaml_spec, "charset", 0)
-            self.file = Spec.decode(yaml_spec, "file")
+            self.file = Spec.decode(yaml_spec, "file", required=True)
             self.include_count = Spec.decode(yaml_spec, "include-count", True)
             self.include_index = Spec.decode(yaml_spec, "include-index", True)
             self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
-            self.name = Spec.decode(yaml_spec, "name")
+            self.name = Spec.decode(yaml_spec, "name", required=True)
             self.names = Spec.decode(yaml_spec, "names")
-            self.offset = Spec.decode(yaml_spec, "offset", 0)
+            self.palette = Spec.decode(yaml_spec, "palette")
             pixel_size_x = Spec.decode(yaml_spec, "pixel-size-x", 1)
             pixel_size_y = Spec.decode(yaml_spec, "pixel-size-y", 1)
             self.pixel_size = PaletteImage.PixelSize(pixel_size_x, pixel_size_y)
             self.rl_encode = Spec.decode(yaml_spec, "rl-encode", True)
             self.screen_file = Spec.decode(yaml_spec, "screen-file")
             self.screen_width = Spec.decode(yaml_spec, "screen-width", spec.screen_width)
+            self.section = Spec.decode(yaml_spec, "section", spec.section)
             self.slice_x = Spec.decode(yaml_spec, "slice-x", 1)
             self.slice_y = Spec.decode(yaml_spec, "slice-y", 1)
             self.trim = RunlengthEncoder.Trim(Spec.decode(yaml_spec, "trim", "trailing"))
-            self.type = Spec.decode(yaml_spec, "type")
 
             if not self.include_index:
                 self.include_count = False
             if self.screen_file is not None:
                 self.rl_encode = False
-            if type(self.charset) is dict and self.type != "image":
-                raise RuntimeError("multiple charsets only supported for images")
             if self.names is not None:
                 if type(self.names) is not list:
                     raise RuntimeError("names must be list")
@@ -111,16 +132,28 @@ class Spec:
 
             self.directory = os.path.dirname(spec_file)
             self.screen_width = Spec.decode(yaml_spec, "screen-width")
+            self.section = Spec.decode(yaml_spec, "section", "data")
+
             if type(yaml_spec["charset"]) is list:
                 self.charset = []
                 for charset_spec in yaml_spec["charset"]:
-                    self.charset.append(Spec.Charset(charset_spec))
+                    self.charset.append(Spec.Charset(charset_spec, self))
             else:
-                self.charset = [Spec.Charset(Spec.decode(yaml_spec, "charset"))]
+                self.charset = [Spec.Charset(Spec.decode(yaml_spec, "charset"), self)]
+
+            if "characters" in yaml_spec:
+                self.characters = [Spec.Characters(spec) for spec in yaml_spec["characters"]]
+            else:
+                self.characters = []
+
+            self.images = []
             if "images" in yaml_spec:
-                self.images = [Spec.Image(spec, self) for spec in yaml_spec["images"]]
-            else:
-                self.images = []
+                for image_spec in yaml_spec["images"]:
+                    if "type" in image_spec and image_spec["type"] != "charset":
+                        # TODO: print deprecation warning
+                        self.characters.append(Spec.Characters(image_spec))
+                    else:
+                        self.images.append(Spec.Image(image_spec, self))
 
 
 class ConvertCharacters(Script.Script):
@@ -129,6 +162,8 @@ class ConvertCharacters(Script.Script):
         self.arg_parser.add_argument("specs")
         self.arg_parser.add_argument("-v", dest="verbose", action="store_true", help="print debug output")
         self.charsets = []
+        self.char_width = None
+        self.char_height = None
 
     # Get filename of input file.
     def input_filename(self):
@@ -140,36 +175,33 @@ class ConvertCharacters(Script.Script):
         except yaml.YAMLError as exc:
             raise RuntimeError(f"can't load specs from '{args.specs}: {exc}")
 
-        char_width = None
-        char_height = None
-
         for charset_spec in specs.charset:
-            if char_width is not None and charset_spec.width != char_width:
+            if self.char_width is not None and charset_spec.width != self.char_width:
                 raise RuntimeError("different character set widths not supported")
-            if char_height is not None and charset_spec.height != char_height:
+            if self.char_height is not None and charset_spec.height != self.char_height:
                 raise RuntimeError("different character set heights not supported")
-            char_width = charset_spec.width
-            char_height = charset_spec.height
-            
-            charset = Charset.Charset(charset_spec.count, bytes((char_width * char_height) // 8), True)
+            self.char_width = charset_spec.width
+            self.char_height = charset_spec.height
+
+            charset = Charset.Charset(charset_spec.count, bytes((self.char_width * self.char_height) // 8), True)
             for index, value in charset_spec.predefined.items():
                 charset.add_with_index(bytes.fromhex(value), index)
             self.charsets.append(charset)
 
+        for characters in specs.characters:
+            self.process_characters(characters)
+
         images = []
 
         for image_spec in specs.images:
-            filename = self.find_file(image_spec.file)
-            image = CharacterImage.CharacterImage(filename, char_width, char_height,
-                                                {0x80000000: 0, 0x808080: 0, 0x7f7f7f: 0, 0x7e7e7e: 0}, pixel_size=image_spec.pixel_size)
-            images.append(image)
-            if image_spec.type in self.processors:
-                self.processors[image_spec.type](self, image, image_spec, True)
-            else:
-                raise RuntimeError(f"unknown type '{image_spec.type}'")
+            images.append(self.load_image(image_spec))
 
         for image_spec, image in zip(specs.images, images):
-            self.processors[image_spec.type](self, image, image_spec, False)
+            self.process_image(image, image_spec, True)
+
+        for image_spec, image in zip(specs.images, images):
+            self.process_image(image, image_spec, False)
+
 
         for index in range(0, len(self.charsets)):
             charset = self.charsets[index]
@@ -180,37 +212,45 @@ class ConvertCharacters(Script.Script):
                 runlength = RunlengthEncoder.RunlengthEncoder()
                 runlength.add_bytes(charset_bytes)
                 charset_bytes = runlength.end()
-            self.assembler.bytes_object(charset_spec.name, charset_bytes, alignment=charset_spec.align)
+            self.assembler.bytes_object(charset_spec.name, charset_bytes, section=charset_spec.section, alignment=charset_spec.align)
 
             self.assembler.comment(f"{charset.character_count} of {charset.size} characters used")
 
 
-    def process_charset(self, image, image_spec, prerun):
-        if not prerun:
-            return
+    def process_characters(self, spec):
+        image = self.load_image(spec)
 
-        if image_spec.charset >= len(self.charsets):
-            raise RuntimeError(f"invalid charset {image_spec.charset}, only {len(self.charsets)} defined")
-        charset = self.charsets[image_spec.charset]
+        if spec.charset >= len(self.charsets):
+            raise RuntimeError(f"invalid charset {spec.charset}, only {len(self.charsets)} defined")
+        charset = self.charsets[spec.charset]
 
-        count = image.count
-        if image_spec.inverted == Inverted.PRESENT:
+        if image.width % spec.char_size_x != 0:
+            raise RuntimeError(f"image width {image.width} not multiple of char-size-x {spec.char_size_x}")
+        if image.height % spec.char_size_y != 0:
+            raise RuntimeError(f"image height {image.height} not multiple of char-size-y {spec.char_size_y}")
+
+        count = image.count // (spec.char_size_x * spec.char_size_y)
+        if spec.inverted == Inverted.PRESENT:
             count //= 2
+        inverted_offset = count * spec.char_size_x * spec.char_size_y
 
-        for index in range(count):
-            value = image.get(index)
-            if value is not None:
-                charset.add_with_index(image.get(index), index + image_spec.offset)
-                if image_spec.inverted == Inverted.CREATE:
-                    value2 = b""
-                    for b in value:
-                        value2 += (b ^ 255).to_bytes(1, byteorder="little")
-                    charset.add_with_index(value2, index + charset.size // 2 + image_spec.offset)
-            if image_spec.inverted == Inverted.PRESENT:
-                value = image.get(index + count)
-                if value is not None:
-                    charset.add_with_index(value, index + charset.size // 2)
+        for y in range(image.height // spec.char_size_y):
+            for x in range(image.width // spec.char_size_x):
+                for yy in range(spec.char_size_y):
+                    for xx in range(spec.char_size_x):
+                        value = image.get_xy(x * spec.char_size_x + xx, y * spec.char_size_y + yy)
+                        if value is None:
+                            continue
+                        index = y * (image.width // spec.char_size_x) + x + yy * spec.char_size_x * count + xx * count
+                        charset.add_with_index(value, index + spec.offset)
 
+                        if spec.inverted == Inverted.PRESENT or spec.inverted == Inverted.CREATE:
+                            if spec.inverted == Inverted.PRESENT:
+                                value = image.get_xy(x * spec.char_size_x + xx, y * spec.char_size_y + yy + image.height // 2)
+                            else:
+                                value = bytes(b ^ 0xFF for b in value)
+                            charset.add_with_index(value, index + inverted_offset)
+                            
 
     def process_image(self, image, image_spec, prerun):
         image_width = image.width
@@ -272,7 +312,7 @@ class ConvertCharacters(Script.Script):
                                         count_before = charset.character_count
                                         char = charset.add(value)
                                         if self.args.verbose and count_before != charset.character_count:
-                                            print(f"{y}.{xx}/{yy}: {value.hex()}  -> {hex(char)}")
+                                            print(f"{x}/{y}.{xx}/{yy}: {value.hex()} -> {hex(char)}")
                                 else:
                                     count_before = charset.character_count
                                     char = charset.add_pair(value, value2)
@@ -299,14 +339,19 @@ class ConvertCharacters(Script.Script):
                     raise RuntimeError("")
             else:
                 if count == 1:
-                    self.assembler.bytes_object(image_spec.name, parts[0])
+                    self.assembler.bytes_object(image_spec.name, parts[0], section=image_spec.section, alignment=image_spec.align)
                 else:
-                    self.assembler.parts(image_spec.name, parts, include_count=image_spec.include_count, include_index=image_spec.include_index, names=image_spec.names)
+                    self.assembler.parts(image_spec.name, parts, include_count=image_spec.include_count, include_index=image_spec.include_index, names=image_spec.names, section=image_spec.section, alignment=image_spec.align)
 
+    def load_image(self, spec):
+        filename = self.find_file(spec.file)
+        if spec.palette is None:
+            palette = CharacterImage.CharacterImage.default_palette
+        else:
+            palette = Palette(spec.palette)
+        return CharacterImage.CharacterImage(filename, self.char_width // palette.bit_length(), self.char_height,
+                                                palette=palette, additional_palette=spec.additional_palette,
+                                                pixel_size=spec.pixel_size)
 
-    processors = {
-        "charset": process_charset,
-        "image": process_image
-    }
 
 ConvertCharacters().run()

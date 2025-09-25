@@ -45,7 +45,7 @@ class AssemblerOutput:
         if visibility is not None and visibility != self.current_visibility:
             visibility_string = f".{visibility} "
         if alignment is not None:
-            alignment_string = f" .align {alignment}"
+            alignment_string = f" .align ${hex(alignment)[2:]}"
         print(f"{visibility_string}{name}{alignment_string} {{", file=self.file)
 
     def byte(self, value):
