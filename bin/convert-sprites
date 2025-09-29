@@ -35,12 +35,16 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 import argparse
 
 import CharacterImage
+import Palette
+import PaletteImage
 import Script
 
 class ConvertSprites(Script.Script):
     def __init__(self) -> None:
         super().__init__("Convert sprite image.", Script.Option.symbol, Script.Option.runlength_encode)
         self.arg_parser.add_argument("image")
+        self.arg_parser.add_argument("-m", "--multicolor", action="store_true", dest="multicolor", help="multicolor sprites")
+        self.arg_parser.add_argument("-P", "--palette", metavar="COLOR0,COLOR1,...", dest="palette", help="specify color palette")
 
     # Get filename of input file.
     def input_filename(self):
@@ -52,7 +56,17 @@ class ConvertSprites(Script.Script):
 
 
     def execute_sub(self):
-        charset = CharacterImage.CharacterImage(self.input_filename(), 8, 1)
+        pixel_size = None
+        palette = None
+        width = 8
+        if self.args.palette:
+            palette = Palette.Palette({val: idx for idx, val in enumerate(map(lambda s: int(s, 16), self.args.palette.split(",")))})
+        if self.args.multicolor:
+            pixel_size=PaletteImage.PixelSize(2, 1)
+            width = 4
+            print(f"multicolor. width: {width}, pixel_bits: {palette.bit_length()}")
+
+        charset = CharacterImage.CharacterImage(self.input_filename(), width, 1, pixel_size=pixel_size, palette=palette)
 
         if charset.width % 3 != 0:
             raise RuntimeError("image width not multiple of 24")
@@ -63,6 +77,8 @@ class ConvertSprites(Script.Script):
 
         num_sprites_x = charset.width // 3
         num_sprites_y = charset.height // 21
+
+        print(f"width: {width}, charset width: {charset.width}, charset height: {charset.height}, num x: {num_sprites_x}, num y: {num_sprites_y}")
 
         for sprite_y in range(0, num_sprites_y):
             for sprite_x in range(0, num_sprites_x):

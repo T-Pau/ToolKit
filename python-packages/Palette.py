@@ -58,3 +58,22 @@ class Palette:
     
     def bit_length(self):
         return self.max_index.bit_length()
+
+c64 = Palette({
+    0x000000: 0, # black
+    0xffffff: 1, # white 
+    0x6D242B: 2, # red
+    0x65C5BC: 3, # cyan
+    0x7A2585: 4, # purple
+    0x48A03C: 5, # green
+    0x221989: 6, # blue
+    0xE9F15E: 7, # yellow
+    0x7A3E1F: 8, # orange
+    0x432B01: 9, # brown
+    0xB5565E: 10, # light-red
+    0x393939: 11, # grey-1
+    0x686868: 12, # grey-2
+    0x9CFF8E: 13, # light-green
+    0x5C52E6: 14, # light-blue
+    0xA3A3A3: 15  # grey-3
+})

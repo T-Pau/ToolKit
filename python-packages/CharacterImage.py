@@ -41,7 +41,9 @@ class CharacterImage:
         0x0040ff40: None,
     })
 
-    def __init__(self, filename, character_width, character_height, palette=None, additional_palette=None, pixel_size=PaletteImage.PixelSize(1, 1)):
+    def __init__(self, filename, character_width, character_height, palette=None, additional_palette=None, pixel_size=None):
+        if pixel_size is None:
+            pixel_size = PaletteImage.PixelSize(1, 1)
         if palette is None:
             palette = self.default_palette
         self.palette = copy(palette)
