@@ -247,6 +247,14 @@ class Screens:
                 return name
         raise RuntimeError(f"file {file_name} not found")
     
+    def parse_boolean(self, value):
+        if value == "true" or value == "yes" or value == "1":
+            return True
+        elif value == "false" or value == "no" or value == "0":
+            return False
+        else:
+            self.error(f"invalid boolean value '{value}'")
+
     def process(self):
         while len(self.files) > 0:
             while line := self.files[-1].readline():
@@ -373,18 +381,13 @@ class Screens:
             elif words[0] == "page_mode":
                 self.page_mode = PageMode(words[1])
             elif words[0] == "runlength_encode":
-                if words[1] == "no":
-                    self.runlength_encode = False
-                elif words[1] == "yes":
-                    self.runlength_encode = True
-                else:
-                    self.error("invalid runlength_encode option, use 'yes' or 'no'")
+                self.runlength_encode = self.parse_boolean(words[1])
             elif words[0] == "title_length":
                 self.title_length = int(words[1])
             elif words[0] == "title_xor":
                 self.title_xor = int(words[1])
             elif words[0] == "word_wrap":
-                self.word_wrap = int(words[1])
+                self.word_wrap = self.parse_boolean(words[1])
             else:
                 self.error(f"unknown command '{words[0]}'")
 
