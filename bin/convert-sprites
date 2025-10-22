@@ -64,7 +64,6 @@ class ConvertSprites(Script.Script):
         if self.args.multicolor:
             pixel_size=PaletteImage.PixelSize(2, 1)
             width = 4
-            print(f"multicolor. width: {width}, pixel_bits: {palette.bit_length()}")
 
         charset = CharacterImage.CharacterImage(self.input_filename(), width, 1, pixel_size=pixel_size, palette=palette)
 
@@ -77,8 +76,6 @@ class ConvertSprites(Script.Script):
 
         num_sprites_x = charset.width // 3
         num_sprites_y = charset.height // 21
-
-        print(f"width: {width}, charset width: {charset.width}, charset height: {charset.height}, num x: {num_sprites_x}, num y: {num_sprites_y}")
 
         for sprite_y in range(0, num_sprites_y):
             for sprite_x in range(0, num_sprites_x):
