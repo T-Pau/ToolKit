@@ -229,20 +229,22 @@ class ConvertCharacters(Script.Script):
         if image.height % spec.char_size_y != 0:
             raise RuntimeError(f"image height {image.height} not multiple of char-size-y {spec.char_size_y}")
 
-        count = image.count // (spec.char_size_x * spec.char_size_y)
+        columns = image.width // spec.char_size_x
+        rows = image.height // spec.char_size_y
         if spec.inverted == Inverted.PRESENT:
-            count //= 2
-        inverted_offset = count * spec.char_size_x * spec.char_size_y
+            rows //= 2
+        count = columns * rows
+        inverted_offset = charset.size // 2
 
-        for y in range(image.height // spec.char_size_y):
-            for x in range(image.width // spec.char_size_x):
+        for y in range(rows):
+            for x in range(columns):
                 for yy in range(spec.char_size_y):
                     for xx in range(spec.char_size_x):
                         value = image.get_xy(x * spec.char_size_x + xx, y * spec.char_size_y + yy)
                         if value is None:
                             continue
-                        index = y * (image.width // spec.char_size_x) + x + yy * spec.char_size_x * count + xx * count
-                        charset.add_with_index(value, index + spec.offset)
+                        index = y * columns + x + yy * spec.char_size_x * count + xx * count + spec.offset
+                        charset.add_with_index(value, index)
 
                         if spec.inverted == Inverted.PRESENT or spec.inverted == Inverted.CREATE:
                             if spec.inverted == Inverted.PRESENT:
@@ -250,7 +252,6 @@ class ConvertCharacters(Script.Script):
                             else:
                                 value = bytes(b ^ 0xFF for b in value)
                             charset.add_with_index(value, index + inverted_offset)
-                            
 
     def process_image(self, image, image_spec, prerun):
         image_width = image.width
