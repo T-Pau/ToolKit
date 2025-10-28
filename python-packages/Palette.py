@@ -77,3 +77,21 @@ c64 = Palette({
     0x5C52E6: 14, # light-blue
     0xA3A3A3: 15  # grey-3
 })
+
+spectrum = Palette({
+    0x000000: 0, # black
+    0x0022c7: 1, # blue
+    0xd62816: 2, # red
+    0xd433c7: 3, # magenta
+    0x00c525: 4, # green
+    0x00c7c9: 5, # cyan
+    0xccc82a: 6, # yellow
+    0xcacaca: 7, # white
+    0x002bfb: 9, # bright blue
+    0xff331c: 10, # bright red
+    0xff40fc: 11, # bright magenta
+    0x00f92f: 12, # bright green
+    0x00fbfe: 13, # bright cyan
+    0xfffc36: 14, # bright yellow
+    0xffffff: 15 # bright white
+})

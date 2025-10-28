@@ -1,7 +1,7 @@
 bin_directory := $top_source_directory/Toolkit/bin
 
-rule convert-bitmap
-    command = {{$bin_directory/convert-bitmap}} -M $depfile $flags -n $name -o $out $in
+rule convert-bitmaps
+    command = {{$bin_directory/convert-bitmaps}} -M $depfile $flags -o $out $in
     depfile = $out.d
 
 rule convert-charset

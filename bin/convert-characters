@@ -89,6 +89,7 @@ class Spec:
             self.inverted = Inverted(Spec.decode(yaml_spec, "inverted", "none"))
             self.offset = Spec.decode(yaml_spec, "offset", 0)
             self.palette = Spec.decode(yaml_spec, "palette")
+            self.placement = Spec.decode(yaml_spec, "placement")
             pixel_size_x = Spec.decode(yaml_spec, "pixel-size-x", 1)
             pixel_size_y = Spec.decode(yaml_spec, "pixel-size-y", 1)
             self.pixel_size = PaletteImage.PixelSize(pixel_size_x, pixel_size_y)
@@ -236,19 +237,40 @@ class ConvertCharacters(Script.Script):
         count = columns * rows
         inverted_offset = charset.size // 2
 
+        offset = spec.offset
+        offsets = []
+        multipliers = []
+        if spec.placement is not None:
+            for pos in spec.placement:
+                for (i, c) in enumerate(pos):
+                    part = int(c)
+                    if part < 0 or part >= spec.char_size_x * spec.char_size_y:
+                        raise RuntimeError(f"invalid character part {part}")
+                    offsets.append(offset + i)
+                    multipliers.append(len(pos))
+                offset += len(pos) * count
+        else:
+            for i in range(spec.char_size_x * spec.char_size_y):
+                offsets.append(i * count + offset)
+                multipliers.append(1)
+
         for y in range(rows):
             for x in range(columns):
                 for yy in range(spec.char_size_y):
                     for xx in range(spec.char_size_x):
-                        value = image.get_xy(x * spec.char_size_x + xx, y * spec.char_size_y + yy)
+                        part = yy * spec.char_size_x + xx
+                        index = (y * columns + x) * multipliers[part] + offsets[part]
+                        image_x = x * spec.char_size_x + xx
+                        image_y = y * spec.char_size_y + yy
+
+                        value = image.get_xy(image_x, image_y)
                         if value is None:
                             continue
-                        index = y * columns + x + yy * spec.char_size_x * count + xx * count + spec.offset
                         charset.add_with_index(value, index)
 
                         if spec.inverted == Inverted.PRESENT or spec.inverted == Inverted.CREATE:
                             if spec.inverted == Inverted.PRESENT:
-                                value = image.get_xy(x * spec.char_size_x + xx, y * spec.char_size_y + yy + image.height // 2)
+                                value = image.get_xy(image_x, image_y + image.height // 2)
                             else:
                                 value = bytes(b ^ 0xFF for b in value)
                             charset.add_with_index(value, index + inverted_offset)
