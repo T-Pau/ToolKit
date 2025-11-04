@@ -27,56 +27,165 @@
 """
 
 class Palette:
-    def __init__(self, colors):
+    def __init__(self, colors: dict[int|str, int | None] | list[int|str], names: dict[str, int] | list[str] | None = None) -> None:
         self.colors = {}
+        self.names = {}
         self.max_index = 0
         self.add_colors(colors)
+        if names is not None:
+            self.add_names(names)
 
-    def __contains__(self, color):
-        return color in self.colors
-    
-    def __copy__(self):
+    def __contains__(self, color: str | int | tuple[int, ...] | float | None) -> bool:
+        if color is None:
+            return True
+        if isinstance(color, str):
+            return color in self.names
+        else:
+            color = self.normalize_color(color)
+            return color in self.colors
+
+    def __copy__(self) -> "Palette":
         copy = Palette({})
         copy.colors = self.colors.copy()
         copy.max_index = self.max_index
+        copy.names = self.names.copy()
         return copy
-    
-    def __getitem__(self, color):
-        return self.colors[color]
 
-    def __len__(self):
+    def __getitem__(self, color: str | int | tuple[int, ...] | float | None) -> int | None:
+        if color is None:
+            return None
+        if isinstance(color, str):
+            if color not in self.names:
+                raise KeyError(f"color name '{color}' not in palette")
+            return self.names[color]
+        else:
+            color = self.normalize_color(color)
+            if color not in self.colors:
+                raise KeyError(f"color {color:#08x} not in palette")
+            return self.colors[color]
+
+    def __len__(self) -> int:
         return len(self.colors)
 
-    def add_colors(self, colors):
-        if colors is None:
-            return
+    def add_colors(self, colors: dict[int|str, int | None] | list[int|str]) -> None:
+        if isinstance(colors, list):
+            for color in colors:
+                if self.max_index == 0 and len(self.colors) == 0:
+                    index = 0
+                else:
+                    index = self.max_index + 1
+                self.add_color(color, index)
+        else:
+            for value, index in colors.items():
+                self.add_color(value, index)
+
+    def add_color(self, color: int | str, index: int | None) -> None:
+        if isinstance(color, str):
+            if color in global_colors:
+                color = global_colors[color]
+            elif "." in color:
+                palette, name = color.split(".", 1)
+                colors = palettes[palette].get_colors(name)
+                for color in colors:
+                    self.add_color(color, index)
+                return
+            else:
+                color = int(color, 16)
+
+        color = self.normalize_color(color)
+
+        if color in self.colors:
+            raise RuntimeError(f"duplicate color {color:#08x} in palette")
+
+        self.colors[color] = index
+        if index is not None and index > self.max_index:
+            self.max_index = index
+
+    def add_names(self, names: dict[str, int] | list[str]) -> None:
+        if isinstance(names, list):
+            for name in names:
+                self.add_name(name, len(self.names))
+        else:
+            for name, index in names.items():
+                self.add_name(name, index)
         
-        for color, index in colors.items():
-            self.colors[color] = index
-            if index is not None and index > self.max_index:
-                self.max_index = index
-    
-    def bit_length(self):
+    def add_name(self, name: str, index: int) -> None:
+        if name in self.names:
+            raise RuntimeError(f"duplicate name '{name}' in palette")
+        if index < 0 or index > self.max_index:
+            raise RuntimeError(f"invalid index {index} for name '{name}'")
+        self.names[name] = index
+
+    def normalize_color(self, color: int | tuple[int, ...] | float) -> int:
+        if isinstance(color, tuple):
+            if len(color) < 3:
+                raise RuntimeError(f"invalid color tuple {color}")
+            alpha = color[3] if len(color) > 3 else 255
+            if alpha == 0:
+                rgb_color = 0xff000000
+            else:
+                rgb_color = (255-alpha) << 24 | color[0] << 16 | color[1] << 8 | color[2]
+            color = rgb_color
+        elif isinstance(color, float):
+            raise RuntimeError("float colors not supported")
+        return color
+
+    def bit_length(self) -> int:
         return self.max_index.bit_length()
 
-c64 = Palette({
-    0x000000: 0, # black
-    0xffffff: 1, # white 
-    0x6D242B: 2, # red
-    0x65C5BC: 3, # cyan
-    0x7A2585: 4, # purple
-    0x48A03C: 5, # green
-    0x221989: 6, # blue
-    0xE9F15E: 7, # yellow
-    0x7A3E1F: 8, # orange
-    0x432B01: 9, # brown
-    0xB5565E: 10, # light-red
-    0x393939: 11, # grey-1
-    0x686868: 12, # grey-2
-    0x9CFF8E: 13, # light-green
-    0x5C52E6: 14, # light-blue
-    0xA3A3A3: 15  # grey-3
-})
+    # Return all color values matching the given index or name.
+    def get_colors(self, color: str | int) -> list[int]:
+        if isinstance(color, str):
+            if color not in self.names:
+                raise KeyError(f"color name '{color}' not in palette")
+            index = self.names[color]
+        else:
+            if color < 0 or color > self.max_index:
+                raise KeyError(f"invalid index {color}")
+            index = color
+        return [color for color, idx in self.colors.items() if idx == index]
+    
+    # Return index of given name.
+    def get_index(self, name: str) -> int:
+        if name not in self.names:
+            raise KeyError(f"color name '{name}' not in palette")
+        return self.names[name]
+
+c64 = Palette([
+    0x000000, #  0: black
+    0xffffff, #  1: white
+    0x6d242b, #  2: red
+    0x65c5bc, #  3: cyan
+    0x7a2585, #  4: purple
+    0x48a03c, #  5: green
+    0x221989, #  6: blue
+    0xe9f15e, #  7: yellow
+    0x7a3e1f, #  8: orange
+    0x432b01, #  9: brown
+    0xb5565e, # 10: light-red
+    0x393939, # 11: grey-1
+    0x686868, # 12: grey-2
+    0x9cff8e, # 13: light-green
+    0x5c52e6, # 14: light-blue
+    0xa3a3a3  # 15: grey-3
+], [
+    "black",
+    "white",
+    "red",
+    "cyan",
+    "purple",
+    "green",
+    "blue",
+    "yellow",
+    "orange",
+    "brown",
+    "light-red",
+    "grey-1",
+    "grey-2",
+    "light-green",
+    "light-blue",
+    "grey-3"
+])
 
 spectrum = Palette({
     0x000000: 0, # black
@@ -94,4 +203,36 @@ spectrum = Palette({
     0x00fbfe: 13, # bright cyan
     0xfffc36: 14, # bright yellow
     0xffffff: 15 # bright white
+}, {
+    "black": 0,
+    "blue": 1,
+    "red": 2,
+    "magenta": 3,
+    "green": 4,
+    "cyan": 5,
+    "yellow": 6,
+    "white": 7,
+    "bright-blue": 9,
+    "bright-red": 10,
+    "bright-magenta": 11,
+    "bright-green": 12,
+    "bright-cyan": 13,
+    "bright-yellow": 14,
+    "bright-white": 15
 })
+
+palettes = {
+    "c64": c64,
+    "spectrum": spectrum
+}
+
+global_colors = {
+    "black": 0x000000,
+    "grey-25": 0x404040,
+    "grey-33": 0x555555,
+    "grey-50": 0x808080,
+    "grey-66": 0xaaaaaa,
+    "grey-75": 0xc0c0c0,
+    "white": 0xffffff,
+    "transparent": 0xff000000
+}

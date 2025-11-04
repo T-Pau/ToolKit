@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import traceback
+from typing import Any, IO
 
 import AssemblerOutput
 import AtomicOutput
@@ -40,7 +41,7 @@ import FileReader
 import RunlengthEncoder
 
 class Option(enum.Enum):
-    name = enum.auto()
+    symbol_name = enum.auto()
     alignment = enum.auto()
     assembler_output = enum.auto()
     binary_output = enum.auto()
@@ -60,7 +61,7 @@ class Option(enum.Enum):
 collection_options = {
     Option.assembler: {Option.section, Option.assembler_output},
     Option.preprocessor: {Option.defines, Option.file_reader, Option.file_reader_preprocessor},
-    Option.symbol: {Option.assembler, Option.name, Option.alignment}
+    Option.symbol: {Option.assembler, Option.symbol_name, Option.alignment}
 }
 
 class Options:
@@ -71,20 +72,19 @@ class Options:
             for option in options:
                 self.add(option)
 
-    def add(self, option):
+    def add(self, option: set[Option]) -> None:
         if option in collection_options:
             for sub_option in collection_options[option]:
                 self.add(sub_option)
         else:
             self.options.add(option)
-        
-    def is_set(self, option):
+
+    def is_set(self, option: Option) -> bool:
         return option in self.options
 
 class Script:
     # Public API
-
-    def __init__(self, description, *options) -> None:
+    def __init__(self, description: str, *options: Option) -> None:
         self.options = Options(options)
         self.arg_parser = argparse.ArgumentParser(description=description, allow_abbrev=False)
         self.arg_parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
@@ -111,7 +111,7 @@ class Script:
         if self.options.is_set(Option.include_directories):
             self.arg_parser.add_argument("-I", metavar="DIRECTORY", dest="include_directories", default=[], action="append", help="search for files in DIRECTORY")
 
-        if self.options.is_set(Option.name):
+        if self.options.is_set(Option.symbol_name):
             self.arg_parser.add_argument("-n", "--name", metavar="NAME", dest="name", help="define symbol NAME")
 
         if self.options.is_set(Option.runlength_encode):
@@ -120,7 +120,7 @@ class Script:
         if self.options.is_set(Option.section):
             self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", default="data", help="put in SECTION")
 
-    def run(self):
+    def run(self) -> None:
         try:
             self.args = self.arg_parser.parse_args()
 
@@ -151,16 +151,16 @@ class Script:
     # Functions called by subclass.
 
     # Add FILE as dependency.
-    def add_dependency(self, file):
+    def add_dependency(self, file: str) -> None:
         if self.dependencies is not None:
             self.dependencies.add(file)
     
     # Print error.
-    def error(self, message):
+    def error(self, message: str) -> None:
         self.output.error(message)
 
     # Find FILE.
-    def find_file(self, file, optional=False):
+    def find_file(self, file: str, optional: bool = False) -> str | None:
         search_include_directories = not (os.path.isabs(file) or file.startswith("./")) and self.options.is_set(Option.include_directories)
         file = os.path.normpath(file)
         found = False
@@ -169,8 +169,9 @@ class Script:
         else:
             found = False
             relative_directories = []
-            if self.input_filename() is not None:
-                relative_directories = [os.path.dirname(self.input_filename())]
+            filename = self.input_filename()
+            if filename is not None:
+                relative_directories = [os.path.dirname(filename)]
             for directory in relative_directories + self.args.include_directories:
                 new_file = os.path.normpath(os.path.join(directory, file))
                 if self.file_exists(new_file):
@@ -185,7 +186,7 @@ class Script:
         self.add_dependency(file)
         return file
 
-    def symbol(self, binary, name_suffix=""):
+    def symbol(self, binary: bytes, name_suffix: str = "") -> None:
         alignment = None
         if self.args.runlength:
             runlength = RunlengthEncoder.RunlengthEncoder()
@@ -198,27 +199,28 @@ class Script:
 
 
     # Get filename of final output file.
-    def output_filename(self):
+    def output_filename(self) -> str:
         if self.args.output_filename is not None:
             return self.args.output_filename
         return self.default_output_filename()
 
     # Get temporary output file
-    def output_file(self):
+    def output_file(self) -> IO[Any]:
         return self.output.get_file()
     
     # Get filename of temporary output file.
-    def output_file_name(self):
+    def output_file_name(self) -> str:
         return self.output.get_filename()
 
     # Get name of assembler symbol.
-    def symbol_name(self):
+    def symbol_name(self) -> str:
         if self.args.name is not None:
             return self.args.name
-        if self.input_filename() is None:
-            raise RuntimeError("no name or input file specififed")
+        filename = self.input_filename()
+        if filename is None:
+            raise RuntimeError("no name or input file specified")
         # TODO: remove invalid characters
-        return os.path.splitext(self.input_filename())[0].replace("-", "_")
+        return os.path.splitext(filename)[0].replace("-", "_")
 
 
     # Required Subclass Methods
@@ -232,36 +234,43 @@ class Script:
     # Optional Subclass Metods
 
     # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
-    def default_output_extension(self):
+    def default_output_extension(self) -> str:
         return "s"
 
     # Alignment to use if --align option is given.
-    def natural_alignment(self):
+    def natural_alignment(self) -> int | None:
         return None
 
     # Validate arguments and other preparations. Run before output file is created.
-    def prepare(self):
+    def prepare(self) -> None:
         pass
 
 
     # Overridable Methods
 
     # Get filename of input file.
-    def input_filename(self):
+    def input_filename(self) -> str | None:
         return self.args.file
     
     # Get filename of final output file if not specified via `-o` command line option.
-    def default_output_filename(self):
-        if self.input_filename() is None:
+    def default_output_filename(self) -> str:
+        filename = self.input_filename()
+        if filename is None:
             raise RuntimeError("no output or input file name specified")
-        name, extension = os.path.splitext(self.input_filename())
+        name, extension = os.path.splitext(filename)
         return os.path.basename(name) + "." + self.default_output_extension()
 
+    # Excute actual processing.
+    def execute_sub(self) -> None:
+        pass
+
+    def get_dynamic_dependencies(self) -> list[str]:
+        return []
 
     # Internal Methods
 
     # Set up and call actual processing.
-    def execute(self):
+    def execute(self) -> None:
         if self.options.is_set(Option.assembler_output):
             self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.input_filename())
@@ -270,10 +279,11 @@ class Script:
         self.execute_sub()
         if self.file_reader is not None and not self.file_reader.ok:            
             self.output.fail()
-        self.dependencies.write()
-        self.dependencies.check()
+        if self.dependencies is not None:
+            self.dependencies.write()
+            self.dependencies.check()
     
-    def create_dyndep(self):
+    def create_dyndep(self) -> None:
         self.common_preparations()
         dependencies = self.get_dynamic_dependencies()
         if self.file_reader is not None and not self.file_reader.ok:            
@@ -284,7 +294,7 @@ class Script:
         print("ninja_dyndep_version = 1", file=self.output_file())
         print(f"build {self.output_filename()} : dyndep | {dependencies_string}", file=self.output_file())
 
-    def common_preparations(self):
+    def common_preparations(self) -> None:
         if self.options.is_set(Option.file_reader):
             preprocess = self.options.is_set(Option.file_reader_preprocessor)
             if preprocess and self.options.is_set(Option.defines):
@@ -293,11 +303,14 @@ class Script:
                 defines = {}
             self.file_reader = FileReader.FileReader(self, self.input_filename(), preprocess=preprocess, defines=defines)
 
-    def read_built_files(self):
-        for line in open(self.find_file(self.args.built_files), "r"):
+    def read_built_files(self) -> None:
+        filename = self.find_file(self.args.built_files)
+        if filename is None:
+            raise RuntimeError("built files list not found")
+        for line in open(filename, "r"):
             self.built_files.add(line.rstrip("\n"))
 
-    def file_exists(self, file):
+    def file_exists(self, file: str) -> bool:
         if file in self.built_files:
             return True
         else:

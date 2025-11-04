@@ -47,7 +47,8 @@ class CharacterImage:
         if palette is None:
             palette = self.default_palette
         self.palette = copy(palette)
-        self.palette.add_colors(additional_palette)
+        if additional_palette is not None:
+            self.palette.add_colors(additional_palette)
         self.pixel_width = palette.bit_length()
         self.image = PaletteImage.PaletteImage(filename, self.palette, pixel_size)
         self.character_width = character_width

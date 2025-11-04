@@ -29,6 +29,7 @@
 import os
 import sys
 import traceback
+from typing import Any, Callable, IO
 
 
 class AtomicOutput:
@@ -51,7 +52,9 @@ class AtomicOutput:
             raise RuntimeError("can't change only-if-changed after opening file")
         self.only_if_changed = value
 
-    def get_filename(self):
+    def get_filename(self) -> str:
+        if self.filename is None:
+            raise RuntimeError("output filename not set")
         if self.temp_name is None:
             if self.only_if_changed:
                 self.temp_name = self.filename + "XXX"  # TODO: make unique name with pid
@@ -59,37 +62,37 @@ class AtomicOutput:
                 self.temp_name = self.filename
         return self.temp_name
 
-    def get_file(self):
+    def get_file(self) -> IO[Any]:
         if self.file is None:
             self.file = open(self.get_filename(), self.mode())
         return self.file
 
-    def fail(self):
+    def fail(self) -> None:
         self.ok = False
 
-    def abort(self, message):
+    def abort(self, message: str) -> None:
         print(f"{sys.argv[0]}: {message}", file=sys.stderr)
         self.discard()
         exit(1)
 
-    def close(self):
+    def close(self) -> None:
         if self.file is not None:
             self.file.close()
             self.file = None
         # if self.temp_name is not None and self.only_if_changed: # TODO: move temp_name to filename
 
-    def discard(self):
+    def discard(self) -> None:
         if self.file is not None:
             self.file.close()
             self.file = None
         if self.temp_name and os.path.exists(self.temp_name):
             os.remove(self.temp_name)
-    
-    def error(self, message):
+
+    def error(self, message: str) -> None:
         print(message, file=sys.stderr)
         self.fail()
 
-    def run(self, code):
+    def run(self, code: Callable[[], None]) -> bool:
         try:
             code()
             if not self.ok:
@@ -106,7 +109,7 @@ class AtomicOutput:
 
     # private methods
 
-    def mode(self):
+    def mode(self) -> str:
         if self.binary:
             return "wb"
         else:

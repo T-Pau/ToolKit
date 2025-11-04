@@ -174,7 +174,7 @@ class ConvertCharacters(Script.Script):
         try:
             specs = Spec(self.input_filename())
         except yaml.YAMLError as exc:
-            raise RuntimeError(f"can't load specs from '{args.specs}: {exc}")
+            raise RuntimeError(f"can't load specs from '{self.args.specs}': {exc}")
 
         for charset_spec in specs.charset:
             if self.char_width is not None and charset_spec.width != self.char_width:

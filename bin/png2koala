@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
+
+import CellImage
+import Script
+from CharacterMapping import CharacterMapping
+
+class PNG2Koala(Script.Script):
+    def __init__(self) -> None:
+        super().__init__("Convert images to bitmaps.", Script.Option.binary_output)
+        self.arg_parser.add_argument("-n", "--name", metavar="NAME", dest="name", help="set the C64 name of the output file")
+        self.arg_parser.add_argument("image")
+        self.character_mapping = CharacterMapping.petscii()
+
+    # Get filename of input file.
+    def input_filename(self):
+        return self.args.image
+
+   # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
+    def default_output_extension(self):
+        return "p00"
+    
+    def execute_sub(self):
+        filename = self.find_file(self.args.image)
+        bitmap = CellImage.CellImage(filename, CellImage.c64_multicolor)
+
+        if self.args.name:
+            name = self.args.name
+        else:
+            name = os.path.splitext(os.path.basename(self.output_filename()))[0]
+        if len(name) > 11:
+            name = name[:11]
+        name = self.character_mapping.encode(name)
+        output_file = self.output_file()
+        output_file.write("C64File".encode("ascii"))
+        output_file.write(b"\x00")
+        output_file.write(b"\x81")
+        output_file.write("PIC ".encode("ascii"))
+        output_file.write(name)
+        output_file.write(b"\x00" * (11 - len(name)))
+        output_file.write(b"\x00\x00")
+        output_file.write(b"\x00\x60")  
+        output_file.write(bitmap.components["bitmap"])
+        output_file.write(bitmap.components["screen"])
+        output_file.write(bitmap.components["color"])
+        output_file.write(bitmap.components["background"].to_bytes(1, byteorder="little"))
+
+PNG2Koala().run()

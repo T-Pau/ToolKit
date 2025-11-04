@@ -32,7 +32,7 @@ import sys
 import sys
 
 class Dependencies:
-    def __init__(self, filename, target):
+    def __init__(self, filename: str, target: str) -> None:
         self.dependencies = set()
         self.filename = filename
         self.target = target
@@ -43,16 +43,16 @@ class Dependencies:
             if os.path.exists(filename):
                 self.dependencies.add(filename)
 
-    def add(self, filename):
+    def add(self, filename: str) -> None:
         self.dependencies.add(filename)
 
-    def write(self):
+    def write(self) -> None:
         if self.filename is not None:
             with open(self.filename, "w") as file:
                 print(f"{self.target}: ", end="", file=file)
                 print(" ".join(self.dependencies), file=file)
 
-    def check(self):
+    def check(self) -> None:
         if not os.path.exists(self.target):
             raise RuntimeError(f"failed to create output file '{self.target}'")
         target_mtime = os.path.getmtime(self.target)
@@ -62,11 +62,11 @@ class Dependencies:
                 raise RuntimeError(f"failed to create dependency file '{self.filename}'")
             depends_mtime = os.path.getmtime(self.filename)
 
-        for dependnecy in self.dependencies:
-            if not os.path.exists(dependnecy):
-                raise RuntimeError(f"dependency '{dependnecy}' does not exist")
-            mtime = os.path.getmtime(dependnecy)
+        for dependency in self.dependencies:
+            if not os.path.exists(dependency):
+                raise RuntimeError(f"dependency '{dependency}' does not exist")
+            mtime = os.path.getmtime(dependency)
             if mtime > target_mtime:
-                raise RuntimeError(f"dependency '{dependnecy}' is newer than output file '{self.target}'")
+                raise RuntimeError(f"dependency '{dependency}' is newer than output file '{self.target}'")
             if depends_mtime is not None and mtime > depends_mtime:
-                raise RuntimeError(f"dependency '{dependnecy}' is newer than dependency file '{self.filename}'")
+                raise RuntimeError(f"dependency '{dependency}' is newer than dependency file '{self.filename}'")

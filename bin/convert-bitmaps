@@ -33,11 +33,17 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
 
 import argparse
+import enum
 import yaml
 
 import CellImage
 import RunlengthEncoder
 import Script
+
+class ObjectType(enum.Enum):
+    CONSTANT = "constant"
+    OMIT = "omit"
+    SYMBOL = "symbol"
 
 class Spec:
     @staticmethod
@@ -53,7 +59,7 @@ class Spec:
         def __init__(self, yaml_spec, spec, bitmap_spec):
             self.name = Spec.decode(yaml_spec, "name")
             self.section = Spec.decode(yaml_spec, "section", bitmap_spec.section)
-            self.constant = Spec.decode(yaml_spec, "constant", default_value=False)
+            self.object_type = ObjectType(Spec.decode(yaml_spec, "object-type", "symbol"))
             self.runlength_encode = Spec.decode(yaml_spec, "runlength-encode", bitmap_spec.runlength_encode)
             self.alignment = Spec.decode(yaml_spec, "alignment")
 
@@ -104,7 +110,7 @@ class ConvertBitmaps(Script.Script):
             filename = self.find_file(bitmap_spec.filename)
             bitmap = CellImage.CellImage(filename, bitmap_spec.layout, bitmap_spec.unused_colors)
 
-            # TODO: check for components without spec, and for spec without components
+            # TODO: check for spec without components
 
             for component_name in bitmap.component_names():
                 if component_name in bitmap_spec.components:
@@ -119,9 +125,9 @@ class ConvertBitmaps(Script.Script):
 
                 data = bitmap.get(component_name)
 
-                if component_spec.constant:
+                if component_spec.object_type == ObjectType.CONSTANT:
                     self.assembler.constant(name, data)
-                else:
+                elif component_spec.object_type == ObjectType.SYMBOL:
                     if component_spec.runlength_encode:
                         encoder = RunlengthEncoder.RunlengthEncoder()
                         encoder.add_bytes(data)

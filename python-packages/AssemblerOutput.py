@@ -28,15 +28,15 @@
 
 
 import sys
-
+from typing import IO, Any
 
 class AssemblerOutput:
-    def __init__(self, file):
+    def __init__(self, file: IO[Any]) -> None:
         self.file = file
         self.current_section = None
         self.current_visibility = "private"
 
-    def begin_object(self, name, section=None, visibility=None, alignment=None):
+    def begin_object(self, name: str, section: str | None = None, visibility: str | None = None, alignment: int | None = None) -> None:
         if section is not None:
             self.section(section)
         self.empty_line()
@@ -48,10 +48,10 @@ class AssemblerOutput:
             alignment_string = f" .align ${hex(alignment)[2:]}"
         print(f"{visibility_string}{name}{alignment_string} {{", file=self.file)
 
-    def byte(self, value):
+    def byte(self, value: Any) -> None:
         print(f"    .data {value}", file=self.file)
 
-    def bytes(self, bytes_array):
+    def bytes(self, bytes_array) -> None:
         i = 0
         for byte in bytes_array:
             if i == 0:
@@ -66,31 +66,33 @@ class AssemblerOutput:
         if i > 0:
             self.file.write("\n")
 
-    def bytes_object(self, name, bytes_array, section="data", visibility=None, alignment=None):
+    def bytes_object(self, name: str, bytes_array, section: str = "data", visibility: str | None = None, alignment: int | None = None) -> None:
         self.begin_object(name, section=section, alignment=alignment, visibility=visibility)
         self.bytes(bytes_array)
         self.end_object()
 
-    def combine_names(self, prefix, name):
+    def combine_names(self, prefix: str | None, name: str | None) -> str:
         if name is None:
+            if prefix is None:
+                raise RuntimeError("neither name nor prefix specified")
             return prefix
         elif prefix is None:
             return name
         else:
             return f"{prefix}_{name}"
 
-    def comment(self, comment):
+    def comment(self, comment: str) -> None:
         print(f"; {comment}", file=self.file)
 
-    def constant(self, name, value):
+    def constant(self, name: str, value: Any) -> None:
         print(f"{name} = {value}", file=self.file)
-    
-    def data_object(self, name, data, section="data", visibility=None, alignment=None):
+
+    def data_object(self, name: str, data: Any, section: str = "data", visibility: str | None = None, alignment: int | None = None) -> None:
         self.begin_object(name, section=section, alignment=alignment, visibility=visibility)
         self.data(data)
         self.end_object()
 
-    def data(self, value, encoding=None, line_length=16):
+    def data(self, value: Any, encoding: str | None = None, line_length: int = 16) -> None:
         if type(value) != list:
             value = [value]
 
@@ -108,24 +110,28 @@ class AssemblerOutput:
             index += 1
         print("", file=self.file)
 
-    def empty_line(self):
+    def empty_line(self) -> None:
         print("", file=self.file)
 
-    def end_object(self):
+    def end_object(self) -> None:
         print("}", file=self.file)
 
-    def header(self, input_file):
-        self.comment(f"This file is automatically created by {sys.argv[0]} from {input_file}.")
+    def header(self, input_file: str | None) -> None:
+        comment = f"This file is automatically created by {sys.argv[0]}"
+        if input_file is not None:
+            comment += f" from {input_file}"
+        comment += "."
+        self.comment(comment)
         self.comment(f"Do not edit.")
         self.empty_line()
-    
-    def label(self, name, visibility=None):
-        visiblity_string = ""
-        if visibility is not None:
-            visiblity_string = f".{visibility} "
-        print(f"{visiblity_string}{name}:", file=self.file)
 
-    def parts(self, name, parts, include_count=True, include_index=True, names=None):
+    def label(self, name: str, visibility: str | None = None) -> None:
+        visibility_string = ""
+        if visibility is not None:
+            visibility_string = f".{visibility} "
+        print(f"{visibility_string}{name}:", file=self.file)
+
+    def parts(self, name: str, parts: list, include_count: bool = True, include_index: bool = True, names: list | None = None) -> None:
         if include_index:
             if include_count:
                 self.begin_object(f"{name}_count")
@@ -140,16 +146,16 @@ class AssemblerOutput:
             self.bytes(parts[i])
             self.end_object()
 
-    def pre_else(self):
+    def pre_else(self) -> None:
         print(f".pre_else", file=self.file)
 
-    def pre_end(self):
+    def pre_end(self) -> None:
         print(f".pre_end", file=self.file)
 
-    def pre_if(self, predicate):
+    def pre_if(self, predicate: str) -> None:
         print(f".pre_if {predicate}", file=self.file)
 
-    def string(self, value, encoding=None, nul_terminate=False):
+    def string(self, value: str, encoding: str | None = None, nul_terminate: bool = False) -> None:
         print(f"    .data \"{value}\"", end="", file=self.file)
         if encoding is not None:
             print(f":{encoding}", end="", file=self.file)
@@ -157,17 +163,17 @@ class AssemblerOutput:
             print(", 0", end="", file=self.file)
         print("", file=self.file)
 
-    def section(self, section):
+    def section(self, section: str) -> None:
         if self.current_section != section:
             self.empty_line()
             print(f".section {section}", file=self.file)
             self.current_section = section
 
-    def visibility(self, visibility):
+    def visibility(self, visibility: str) -> None:
         if self.current_visibility != visibility:
             self.empty_line()
             print(f".visibility {visibility}", file=self.file)
             self.current_visibility = visibility
 
-    def word(self, value):
+    def word(self, value: Any) -> None:
         print(f"    .data {value}:2", file=self.file)

@@ -1,6 +1,3 @@
-from copy import copy
-from PIL import Image
-
 """
   PaletteImage -- convert image to palette mode
   Copyright (C) Dieter Baron
@@ -29,12 +26,16 @@ from PIL import Image
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+from copy import copy
+from PIL import Image
 from collections import namedtuple
+
+from Palette import Palette
 
 PixelSize = namedtuple("PixelSize", "x y")
 
 class PaletteImage:
-    def __init__(self, filename, palette, pixel_size=PixelSize(1,1)):
+    def __init__(self, filename: str, palette: Palette, pixel_size: PixelSize = PixelSize(1, 1)) -> None:
         self.palette = copy(palette)
         self.filename = filename
         self.pixel_size = pixel_size
@@ -48,21 +49,20 @@ class PaletteImage:
         self.width = self.image.width // self.pixel_size.x
         self.height = self.image.height // self.pixel_size.y
 
-    def get(self, x, y):
-        pixel = None
+    def get(self, x: int, y: int) -> int | None:
+        color = None
         for sub_y in range(self.pixel_size.y):
             for sub_x in range(self.pixel_size.x):
-                sub_pixel = self.image.getpixel((x * self.pixel_size.x + sub_x, y * self.pixel_size.y + sub_y))
-                if pixel is None:
-                    pixel = sub_pixel
-                elif pixel != sub_pixel:
-                    raise RuntimeError(f"non-uniform logical pixel at {self.filename}:({x},{y})")
-        alpha = pixel[3] if len(pixel) > 3 else 255
-        if alpha == 0:
-            color = 0xff000000
-        else:
-            color = (255-alpha) << 24 | pixel[0] << 16 | pixel[1] << 8 | pixel[2]
-        if color in self.palette:
-            return self.palette[color]
-        else:
-            raise RuntimeError(f"invalid color {pixel} at {self.filename}:({x},{y})")
+                image_x = x * self.pixel_size.x + sub_x
+                image_y = y * self.pixel_size.y + sub_y
+
+                try:
+                    sub_color = self.palette[self.image.getpixel((image_x, image_y))]
+                except Exception as ex:
+                    raise RuntimeError(f"{ex} at {self.filename}:({image_x},{image_y})")
+                
+                if color is None:
+                    color = sub_color
+                elif color != sub_color:
+                    raise RuntimeError(f"non-uniform logical pixel at {self.filename}:({image_x},{image_y})")
+        return color
