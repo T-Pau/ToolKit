@@ -92,7 +92,7 @@ class CharacterImage:
                         got_hole = True
                     else:
                         got_pixel = True
-                        byte |= self.image.get(xx + pixel, yy) << (8 - (pixel + 1) * self.pixel_width)
+                        byte |= color << (8 - (pixel + 1) * self.pixel_width)
                 value += byte.to_bytes(1, byteorder="little")
         if got_hole:
             if got_pixel:
