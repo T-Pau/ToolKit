@@ -31,6 +31,8 @@
 import os
 import sys
 
+from typing import Any
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, "python-packages")))
 
 import argparse
@@ -47,64 +49,97 @@ class FieldType(enum.Enum):
 
 class Spec:
     @staticmethod
-    def decode(yaml, key, default_value=None):
+    def decode(yaml: dict[str, Any], key: str, default_value: Any = None) -> Any:
         if yaml is not None and key in yaml:
             return yaml[key]
         else:
             return default_value
 
     class Settings:
-        def __init__(self, yaml):
+        def __init__(self, yaml: dict[str, Any]) -> None:
             self.default_string_encoding = Spec.decode(yaml, "default_string_encoding")
             self.include_count = Spec.decode(yaml, "include_count", True)
             self.prefix = Spec.decode(yaml, "prefix", "")
 
     class Field:
-        def __init__(self, yaml, settings):
+        def __init__(self, yaml: dict[str, Any], settings: 'Spec.Settings') -> None:
             self.type = FieldType(Spec.decode(yaml, "type", "single"))
             self.encoding = Spec.decode(yaml, "encoding")
             self.default_value = Spec.decode(yaml, "default_value")
             self.length = Spec.decode(yaml, "length", 1)
             self.nul_terminate = Spec.decode(yaml, "nul_terminate", False)
             self.padding = Spec.decode(yaml, "padding", self.default_padding())
-            self.default_value_prefix = Spec.decode(yaml, "default_value_prefix", "")
-            self.default_value_postfix = Spec.decode(yaml, "default_value_postfix", "")
-            self.default_value_field = Spec.decode(yaml, "default_value_field")
 
-        def default_padding(self):
+        def default_padding(self) -> int|str|None:
             if self.type == FieldType.MULTI or self.type == FieldType.SINGLE:
                 return 0
             elif self.type == FieldType.STRING:
                 return " "
 
-    def decode_struct(self, yaml):
+    def decode_struct(self, yaml: dict[str, Any]) -> dict[str, Any]:
         struct = {}
         for key in self.fields.keys():
-            field = self.fields[key]
-            if key in yaml:
-                value = yaml[key]
-            elif field.default_value is not None:
-                value = field.default_value
-            elif field.default_value_field is not None and field.default_value_field in yaml:
-                value = field.default_value_prefix + yaml[field.default_value_field] + field.default_value_postfix
-            elif field.type == FieldType.MULTI:
-                value = []
-            elif field.type == FieldType.OMIT:
-                value = None
-            else:
-                raise RuntimeError(f"no known value for {key}")
-
-            if field.length > 1:
-                while len(value) < field.length:
-                    if type(value) == list:
-                        value.append(field.padding)
-                    else:
-                        value += field.padding
-
-            struct[key] = value
+            self.decode_field(yaml, key, struct, set())
         return struct
+    
+    def decode_field(self, yaml: dict[str, Any], key: str, struct: dict[str, Any], dependent_fields: set[str]) -> Any:
+        if key in struct:
+            return struct[key]
+        
+        if key in dependent_fields:
+            raise RuntimeError(f"circular dependency in field {key}")
+        dependent_fields.add(key)
 
-    def __init__(self, yaml):
+        field = self.fields[key]
+        if key in yaml:
+            value = yaml[key]
+        elif field.default_value is not None:
+            value = self.parse_default_value(field.default_value, yaml, struct, dependent_fields)
+        elif field.type == FieldType.MULTI:
+            value = []
+        elif field.type == FieldType.OMIT:
+            value = None
+        else:
+            raise RuntimeError(f"no known value for field {key}")
+
+        if field.length > 1:
+            while len(value) < field.length:
+                if type(value) == list:
+                    value.append(field.padding)
+                else:
+                    value += field.padding
+
+        struct[key] = value
+        return value
+
+    def parse_default_value(self, default_value: Any, yaml: dict[str, Any], struct: dict[str, Any], dependent_fields: set[str]) -> Any:
+        # To allow non-string values, return directly if it doesn't contain a field reference or if it is only a field reference.
+        if default_value.find("{{") == -1:
+            return default_value
+        if default_value.startswith("{{") and default_value.find("}}") == len(default_value) - 2:
+            field = default_value[2:-2].strip()
+            if field not in self.fields:
+                raise RuntimeError(f"unknown field {field} in default value '{default_value}'")
+            return self.decode_field(yaml, field, struct, dependent_fields)
+        
+        start = 0
+        value = ""
+        while (braces := default_value.find("{{", start)) >= 0:
+            value += default_value[start:braces]
+            start = braces + 2
+            end = default_value.find("}}", start)
+            if end == -1:
+                raise RuntimeError(f"unmatched '{{' in default value '{default_value}'")
+            field = default_value[start:end].strip()
+            if field not in self.fields:
+                raise RuntimeError(f"unknown field {field} in default value '{default_value}'")
+            value += str(self.decode_field(yaml, field, struct, dependent_fields))
+            start = end + 2
+        value += default_value[start:]
+
+        return value
+
+    def __init__(self, yaml: dict[str, Any]) -> None:
         self.settings = Spec.Settings(yaml["settings"])
         self.fields = {}
         self.structs = []
@@ -119,10 +154,10 @@ class ParallelStruct(Script.Script):
         self.arg_parser.add_argument("structs")
 
     # Get filename of input file.
-    def input_filename(self):
+    def input_filename(self) -> str:
         return self.args.structs
 
-    def execute_sub(self):
+    def execute_sub(self) -> None:
         with open(self.input_filename(), "r") as stream:
             try:
                 structs = Spec(yaml.safe_load(stream))
@@ -138,10 +173,10 @@ class ParallelStruct(Script.Script):
                 continue
 
             if field.type == FieldType.STRING:
+                encoding = field.encoding
+                if encoding is None:
+                    encoding = structs.settings.default_string_encoding
                 for i, struct in enumerate(structs.structs):
-                    encoding = field.encoding
-                    if encoding is None:
-                        encoding = structs.settings.default_string_encoding
                     self.assembler.begin_object(f"{structs.settings.prefix}{key}_{i}")
                     self.assembler.string(struct[key], encoding, field.nul_terminate)
                     self.assembler.end_object()
