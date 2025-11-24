@@ -26,6 +26,35 @@
   IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+def get_colors(color: str | int | tuple[int, ...] | float) -> list[int]:
+    if isinstance(color, str):
+        if "." in color:
+            palette, name = color.split(".", 1)
+            if palette not in palettes:
+                raise KeyError(f"palette '{palette}' not found")
+            return palettes[palette].get_colors(name)
+        if color in global_colors:
+            return [global_colors[color]]
+        else:
+            raise KeyError(f"color name '{color}' not in global colors")
+    elif isinstance(color, tuple):
+            if len(color) < 3:
+                raise RuntimeError(f"invalid color tuple {color}")
+            alpha = color[3] if len(color) > 3 else 255
+            if alpha == 0:
+                rgb_color = 0xff000000
+            else:
+                rgb_color = (255-alpha) << 24 | color[0] << 16 | color[1] << 8 | color[2]
+            return [rgb_color]
+    elif isinstance(color, int):
+        return [color]
+    else:
+        raise RuntimeError("float colors not supported")
+    
+def get_color(color: str | int | tuple[int, ...] | float) -> int:
+    colors = get_colors(color)
+    return colors[0]
+
 class Palette:
     def __init__(self, colors: dict[int|str, int | None] | list[int|str], names: dict[str, int] | list[str] | None = None) -> None:
         self.colors = {}

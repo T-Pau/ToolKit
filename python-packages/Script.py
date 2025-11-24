@@ -52,6 +52,7 @@ class Option(enum.Enum):
     include_directories = enum.auto()
     runlength_encode = enum.auto()
     section = enum.auto()
+    verbose = enum.auto()
 
     # collections
     assembler = enum.auto()
@@ -95,6 +96,9 @@ class Script:
         self.file_reader = None
         self.dyndep_mode = False
         self.built_files = set()
+
+        if self.options.is_set(Option.verbose):
+            self.arg_parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="enable verbose output")
 
         if self.options.is_set(Option.alignment):
             if self.natural_alignment() is not None:
