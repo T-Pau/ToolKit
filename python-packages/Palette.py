@@ -1,32 +1,60 @@
+# Palette -- map colors to indices
+# Copyright (C) Dieter Baron
+#
+# The authors can be contacted at <toolkit@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#    products derived from this software without specific prior
+#    written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS "AS IS" AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 """
-  Palette -- map colors to indices
-  Copyright (C) Dieter Baron
+This module provides color palettes mapping colors and names to indices.
 
-  The authors can be contacted at <toolkit@tpau.group>.
+Colors can be specified as:
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. The names of the authors may not be used to endorse or promote
-     products derived from this software without specific prior
-     written permission.
+- The name of a global color (e.g., `black`, `white`, `grey-50`, `transparent`).
 
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
-  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- The name of a color in a standard palette (e.g., `c64.red`, `spectrum.bright-blue`).
+
+- An integer in the format 0xAARRGGBB (where `A` value 0 represents opaque).
+
+- A tuple of RGB(A) values (where `A` value 0 represents transparent).
+
+Returned color values are in the format 0xAARRGGBB.
 """
+
 
 def get_colors(color: str | int | tuple[int, ...] | float) -> list[int]:
+    """Return all color values matching the given color specification.
+    
+    Args:
+        color: color to look up.
+
+    Returns:
+        List of matching color values.
+
+    Raises:
+        KeyError: If the color name or palette is not found.
+        RuntimeError: If the color specification is invalid.
+    """
+
     if isinstance(color, str):
         if "." in color:
             palette, name = color.split(".", 1)
@@ -52,11 +80,32 @@ def get_colors(color: str | int | tuple[int, ...] | float) -> list[int]:
         raise RuntimeError("float colors not supported")
     
 def get_color(color: str | int | tuple[int, ...] | float) -> int:
+    """Return the first color value matching the given color specification.
+
+    Args:
+        color: color to look up.
+
+    Returns:
+        The first matching color value.
+
+    Raises:
+        KeyError: If the color name or palette is not found.
+        RuntimeError: If the color specification is invalid.
+    """
     colors = get_colors(color)
     return colors[0]
 
 class Palette:
+    """A palette mapping colors and names to indices.
+    """
+
     def __init__(self, colors: dict[int|str, int | None] | list[int|str], names: dict[str, int] | list[str] | None = None) -> None:
+        """Initialize a Palette.
+        
+        Args:
+            colors: A list or dictionary of colors mapping color values to indices.
+            names: A list or dictionary mapping names to indices.
+        """
         self.colors = {}
         self.names = {}
         self.max_index = 0
@@ -65,6 +114,15 @@ class Palette:
             self.add_names(names)
 
     def __contains__(self, color: str | int | tuple[int, ...] | float | None) -> bool:
+        """Check if the palette contains the given color.
+        
+        Args:
+            color: color to check.
+            
+        Returns:
+            True if the color is in the palette, False otherwise.
+        """
+
         if color is None:
             return True
         if isinstance(color, str):
@@ -74,6 +132,8 @@ class Palette:
             return color in self.colors
 
     def __copy__(self) -> "Palette":
+        """Return a deep copy of the palette."""
+
         copy = Palette({})
         copy.colors = self.colors.copy()
         copy.max_index = self.max_index
@@ -81,6 +141,17 @@ class Palette:
         return copy
 
     def __getitem__(self, color: str | int | tuple[int, ...] | float | None) -> int | None:
+        """Return the index of the given color or name.
+
+        Args:
+            color: color or name to look up.
+
+        Returns:
+            The index of the color or name.
+        
+        Raises:
+            KeyError: If the color or name is not found in the palette.
+        """
         if color is None:
             return None
         if isinstance(color, str):
@@ -94,9 +165,17 @@ class Palette:
             return self.colors[color]
 
     def __len__(self) -> int:
+        """Return the number of colors in the palette."""
+
         return len(self.colors)
 
     def add_colors(self, colors: dict[int|str, int | None] | list[int|str]) -> None:
+        """Add multiple colors to the palette.
+
+        Args:
+            colors: A list or dictionary of colors mapping color values to indices.
+        """
+
         if isinstance(colors, list):
             for color in colors:
                 if self.max_index == 0 and len(self.colors) == 0:
@@ -131,6 +210,12 @@ class Palette:
             self.max_index = index
 
     def add_names(self, names: dict[str, int] | list[str]) -> None:
+        """Add multiple names to the palette.
+
+        Args:
+            names: A list or dictionary mapping names to indices.
+        """
+
         if isinstance(names, list):
             for name in names:
                 self.add_name(name, len(self.names))
@@ -146,6 +231,17 @@ class Palette:
         self.names[name] = index
 
     def normalize_color(self, color: int | tuple[int, ...] | float) -> int:
+        """Normalize a color to the 0xAARRGGBB format.
+
+        Args:
+            color: color to normalize.
+
+        Returns:
+            The normalized color.
+
+        Raises:
+            RuntimeError: If the color specification is invalid.
+        """
         if isinstance(color, tuple):
             if len(color) < 3:
                 raise RuntimeError(f"invalid color tuple {color}")
@@ -155,15 +251,32 @@ class Palette:
             else:
                 rgb_color = (255-alpha) << 24 | color[0] << 16 | color[1] << 8 | color[2]
             color = rgb_color
+        elif isinstance(color, int):
+            if color & 0xff000000 == 0xff000000:
+                color = 0xff000000
         elif isinstance(color, float):
             raise RuntimeError("float colors not supported")
         return color
 
     def bit_length(self) -> int:
+        """Return the number of bits needed to represent the highest index."""
+        
         return self.max_index.bit_length()
 
     # Return all color values matching the given index or name.
     def get_colors(self, color: str | int) -> list[int]:
+        """Return all color values matching the given index or name.
+
+        Args:
+            color: name or index to look up.
+        
+        Returns:
+            List of matching color values.
+
+        Raises:
+            KeyError: If the name or index is not found in the palette.
+        """
+
         if isinstance(color, str):
             if color not in self.names:
                 raise KeyError(f"color name '{color}' not in palette")
@@ -176,6 +289,18 @@ class Palette:
     
     # Return index of given name.
     def get_index(self, name: str) -> int:
+        """Return the index of the given name.
+
+        Args:
+            name: name to look up.
+
+        Returns:
+            The index of the name.
+
+        Raises:
+            KeyError: If the name is not found in the palette.
+        """
+
         if name not in self.names:
             raise KeyError(f"color name '{name}' not in palette")
         return self.names[name]
