@@ -73,7 +73,7 @@ class AssemblerOutput:
         """
         print(f"    .data {value}", file=self.file)
 
-    def bytes(self, bytes_array) -> None:
+    def bytes(self, bytes_array: bytes) -> None:
         """Add a byte array as `.data` to current object.
 
         Args:
@@ -94,7 +94,7 @@ class AssemblerOutput:
         if i > 0:
             self.file.write("\n")
 
-    def bytes_object(self, name: str, bytes_array, section: str = "data", visibility: str | None = None, alignment: int | None = None) -> None:
+    def bytes_object(self, name: str, bytes_array: "bytes", section: str = "data", visibility: str | None = None, alignment: int | None = None) -> None:
         """Create an object containing a byte array.
         
         Args:
