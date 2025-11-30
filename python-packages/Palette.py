@@ -96,9 +96,8 @@ def get_color(color: str | int | tuple[int, ...] | float) -> int:
     return colors[0]
 
 class Palette:
-    """A palette mapping colors and names to indices.
-    """
-
+    """A palette mapping colors and names to indices."""
+    
     def __init__(self, colors: dict[int|str, int | None] | list[int|str], names: dict[str, int] | list[str] | None = None) -> None:
         """Initialize a Palette.
         
@@ -106,6 +105,7 @@ class Palette:
             colors: A list or dictionary of colors mapping color values to indices.
             names: A list or dictionary mapping names to indices.
         """
+        
         self.colors = {}
         self.names = {}
         self.max_index = 0
@@ -175,14 +175,18 @@ class Palette:
         Args:
             colors: A list or dictionary of colors mapping color values to indices.
         """
-
+        
         if isinstance(colors, list):
             for color in colors:
                 if self.max_index == 0 and len(self.colors) == 0:
                     index = 0
                 else:
                     index = self.max_index + 1
-                self.add_color(color, index)
+                if isinstance(color, list):
+                    for c in color:
+                        self.add_color(c, index)
+                else:
+                    self.add_color(color, index)
         else:
             for value, index in colors.items():
                 self.add_color(value, index)
@@ -306,21 +310,22 @@ class Palette:
         return self.names[name]
 
 c64 = Palette([
+    # PALette_C64_v1, pepto?
     0x000000, #  0: black
     0xffffff, #  1: white
-    0x6d242b, #  2: red
-    0x65c5bc, #  3: cyan
-    0x7a2585, #  4: purple
-    0x48a03c, #  5: green
-    0x221989, #  6: blue
-    0xe9f15e, #  7: yellow
-    0x7a3e1f, #  8: orange
-    0x432b01, #  9: brown
-    0xb5565e, # 10: light-red
-    0x393939, # 11: grey-1
-    0x686868, # 12: grey-2
-    0x9cff8e, # 13: light-green
-    0x5c52e6, # 14: light-blue
+    [0x8a323d, 0x6d242b], #  2: red
+    [0x67bfb3, 0x65c5bc], #  3: cyan
+    [0x8d36a1, 0x7a2585], #  4: purple
+    [0x4ba648, 0x48a03c], #  5: green
+    [0x322dab, 0x221989], #  6: blue
+    [0xcdd256, 0xe9f15e], #  7: yellow
+    [0x8e501a, 0x7a3e1f], #  8: orange
+    [0x523d01, 0x432b01], #  9: brown
+    [0xbc636e, 0xb5565e], # 10: light-red
+    [0x4e4e4e, 0x393939], # 11: grey-1
+    [0x767676, 0x686868], # 12: grey-2
+    [0x8ee98b, 0x9cff8e], # 13: light-green
+    [0x6b66e4, 0x5c52e6], # 14: light-blue
     0xa3a3a3  # 15: grey-3
 ], [
     "black",
