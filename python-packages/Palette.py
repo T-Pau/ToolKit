@@ -98,7 +98,7 @@ def get_color(color: str | int | tuple[int, ...] | float) -> int:
 class Palette:
     """A palette mapping colors and names to indices."""
     
-    def __init__(self, colors: dict[int|str, int | None] | list[int|str], names: dict[str, int] | list[str] | None = None) -> None:
+    def __init__(self, colors: dict[int|str, int | None] | list[int|str|list[int|str]], names: dict[str, int] | list[str] | None = None) -> None:
         """Initialize a Palette.
         
         Args:
@@ -169,7 +169,7 @@ class Palette:
 
         return len(self.colors)
 
-    def add_colors(self, colors: dict[int|str, int | None] | list[int|str]) -> None:
+    def add_colors(self, colors: dict[int|str, int | None] | list[int|str|list[int|str]]) -> None:
         """Add multiple colors to the palette.
 
         Args:
