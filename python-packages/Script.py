@@ -1,29 +1,30 @@
-"""
-  Script -- implement reliable scripts with standard interface
-  Copyright (C) Dieter Baron
+# Script -- implement reliable scripts with standard interface
+# Copyright (C) Dieter Baron
+#
+# The author can be contacted at <dillo@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  The author can be contacted at <dillo@tpau.group>.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. The names of the authors may not be used to endorse or promote
-     products derived from this software without specific prior
-     written permission.
-
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
-  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""This module implements a standard script interface that is easy to integrate into a build system.
 """
 
 import argparse
@@ -41,6 +42,26 @@ import FileReader
 import RunlengthEncoder
 
 class Option(enum.Enum):
+    """Optional features for Script class.
+    
+    Attributes:
+        symbol_name: Specify symbol name with `-n`/`--name` option.
+        alignment: Specify alignment with `-a`/`--alignment` and `--align` options.
+        assembler_output: Create assembler source file.
+        binary_output: Open output file in binary mode.
+        defines: Define preprocessor symbols with  `-D` option.
+        dyndep: Enable dynamic dependency discovery with `--dyndep` and `--built-files` options.
+        file_reader: Use FileReader to read input files.
+        file_reader_preprocessor: Enable preprocessing in FileReader.
+        include_directories: Specify include directories with `-I` options.
+        runlength_encode: Enable runlength encoding with `-r`/`--runlength` option.
+        section: Specify assembler section with `-s`/`--section` option.
+        verbose: Enable verbose output with `-v`/`--verbose` option.
+        assembler: Collection to enable assembler-related options (section, assembler_output).
+        preprocessor: Collection to enable preprocessor-related options (defines, file_reader, file_reader_preprocessor).
+        symbol: Collection to enable symbol-related options (assembler, symbol_name, alignment).
+    """
+    
     symbol_name = enum.auto()
     alignment = enum.auto()
     assembler_output = enum.auto()
@@ -84,8 +105,17 @@ class Options:
         return option in self.options
 
 class Script:
+    """Base class for scripts with standard interface."""
+
     # Public API
     def __init__(self, description: str, *options: Option) -> None:
+        """Initialize script.
+
+        Args:
+            description: Description of the script for the help message.
+            options: Optional features to enable.
+        """
+
         self.options = Options(options)
         self.arg_parser = argparse.ArgumentParser(description=description, allow_abbrev=False)
         self.arg_parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
@@ -125,6 +155,8 @@ class Script:
             self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", default="data", help="put in SECTION")
 
     def run(self) -> None:
+        """Run the script."""
+
         try:
             self.args = self.arg_parser.parse_args()
 
@@ -154,17 +186,45 @@ class Script:
     # Subclass API
     # Functions called by subclass.
 
-    # Add FILE as dependency.
     def add_dependency(self, file: str) -> None:
+        """Add a file dependency.
+
+        This method is meant to be called by subclasses.
+        
+        Args:
+            file: The dependency file.
+        """
+
         if self.dependencies is not None:
             self.dependencies.add(file)
     
-    # Print error.
     def error(self, message: str) -> None:
+        """Report an error and mark script as failed.
+        
+        This method is meant to be called by subclasses.
+        
+        Args:
+            message: The error message.
+        """
+
         self.output.error(message)
 
-    # Find FILE.
     def find_file(self, file: str, optional: bool = False) -> str | None:
+        """Find a file, searching the directory of the input file and include directories.
+
+        This method is meant to be called by subclasses.
+        
+        Args:
+            file: Name of the file to find.
+            optional: If true, return None if the file is not found.
+
+        Returns:
+            The name of the found file, or None if optional and the file is not found.
+
+        Raises:
+            RuntimeError: If a non-optional file is not found.
+        """
+
         search_include_directories = not (os.path.isabs(file) or file.startswith("./")) and self.options.is_set(Option.include_directories)
         file = os.path.normpath(file)
         found = False
@@ -191,6 +251,15 @@ class Script:
         return file
 
     def symbol(self, binary: bytes, name_suffix: str = "") -> None:
+        """Create assembler symbol for binary data.
+        
+        This method is meant to be called by subclasses.
+        
+        Args:
+            binary: The binary data.
+            name_suffix: Suffix to append to the symbol name.
+        """
+
         alignment = None
         if self.args.runlength:
             runlength = RunlengthEncoder.RunlengthEncoder()
@@ -202,22 +271,50 @@ class Script:
         self.assembler.bytes_object(self.symbol_name()+name_suffix, binary, section=self.args.section, alignment=alignment)
 
 
-    # Get filename of final output file.
     def output_filename(self) -> str:
+        """Get filename of final output file.
+        
+        This method is meant to be called by subclasses.
+
+        Returns:
+            The output filename.        
+        """
+
         if self.args.output_filename is not None:
             return self.args.output_filename
         return self.default_output_filename()
 
-    # Get temporary output file
     def output_file(self) -> IO[Any]:
+        """Get file object for output file.
+
+        This method is meant to be called by subclasses.
+
+        Returns:
+            The output file object.
+        """
+
         return self.output.get_file()
     
-    # Get filename of temporary output file.
     def output_file_name(self) -> str:
+        """Get filename of temporary output file.
+
+        This method is meant to be called by subclasses.
+
+        Returns:
+            The temporary output filename.
+        """
+
         return self.output.get_filename()
 
-    # Get name of assembler symbol.
     def symbol_name(self) -> str:
+        """Get name of assembler symbol.
+
+        This method is meant to be called by subclasses.
+
+        Returns:
+            The symbol name.
+        """
+
         if self.args.name is not None:
             return self.args.name
         filename = self.input_filename()
@@ -229,24 +326,56 @@ class Script:
 
     # Required Subclass Methods
 
-    # Do actual processing.
-    # execute_sub(self)
+    def execute_sub(self) -> None:
+        """Do actual processing.
+
+        This method must be implemented by subclasses.
+        """
+
+        raise NotImplementedError()
 
     # Get list of dependencies for dynamic dependency discovery (only needed if dyndep option is set)
-    # get_dynamic_dependencies(self)
+    def get_dynamic_dependencies(self) -> list[str]:
+        """Get list of dependencies for dynamic dependency discovery.
+
+        This method must be implemented by subclasses that use dynamic dependency discovery.
+
+        Returns:
+            List of dependency filenames.
+        """
+
+        return []
 
     # Optional Subclass Metods
 
     # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
     def default_output_extension(self) -> str:
+        """Get default filename extension for output files.
+
+        This method can be overridden by subclasses.
+
+        Returns:
+            The default filename extension.
+        """
+
         return "s"
 
-    # Alignment to use if --align option is given.
     def natural_alignment(self) -> int | None:
+        """Get natural alignment for created object.
+
+        This method can be overridden by subclasses.
+
+        Returns:
+            The natural alignment or None if not applicable.
+        """
         return None
 
-    # Validate arguments and other preparations. Run before output file is created.
     def prepare(self) -> None:
+        """Validate arguments and do other preparations. Run before output file is created.
+
+        This method can be overridden by subclasses.
+        """
+
         pass
 
 
@@ -254,22 +383,28 @@ class Script:
 
     # Get filename of input file.
     def input_filename(self) -> str | None:
+        """Get filename of input file.
+        
+        This method can be overridden by subclasses.
+        
+        Returns:
+            The input filename, or None if no input file is used."""
         return self.args.file
     
-    # Get filename of final output file if not specified via `-o` command line option.
     def default_output_filename(self) -> str:
+        """Get default filename of final output file if not specified via `-o` command line option.
+        
+        This method can be overridden by subclasses.
+        
+        Returns:
+            The default output filename.
+        """
+
         filename = self.input_filename()
         if filename is None:
             raise RuntimeError("no output or input file name specified")
         name, extension = os.path.splitext(filename)
         return os.path.basename(name) + "." + self.default_output_extension()
-
-    # Excute actual processing.
-    def execute_sub(self) -> None:
-        pass
-
-    def get_dynamic_dependencies(self) -> list[str]:
-        return []
 
     # Internal Methods
 

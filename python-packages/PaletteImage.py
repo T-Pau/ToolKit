@@ -1,29 +1,30 @@
-"""
-  PaletteImage -- convert image to palette mode
-  Copyright (C) Dieter Baron
+# PaletteImage -- convert image to palette mode
+# Copyright (C) Dieter Baron
+#
+# The author can be contacted at <dillo@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  The author can be contacted at <dillo@tpau.group>.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. The names of the authors may not be used to endorse or promote
-     products derived from this software without specific prior
-     written permission.
-
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
-  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""This module converts possibly non-square pixels of an image to palette indices.
 """
 
 from copy import copy
@@ -35,7 +36,17 @@ from Palette import Palette
 PixelSize = namedtuple("PixelSize", "x y")
 
 class PaletteImage:
+    """Convert image to palette indices."""
+
     def __init__(self, filename: str, palette: Palette, pixel_size: PixelSize = PixelSize(1, 1)) -> None:
+        """Initialize PaletteImage.
+
+        Args:
+            filename: Name of file to load image from.
+            palette: Palette to use.
+            pixel_size: Size of logical pixels.
+        """
+
         self.palette = copy(palette)
         self.filename = filename
         self.pixel_size = pixel_size
@@ -50,6 +61,16 @@ class PaletteImage:
         self.height = self.image.height // self.pixel_size.y
 
     def get(self, x: int, y: int) -> int | None:
+        """Get palette index of logical pixel at (x, y).
+
+        Args:
+            x: X coordinate of logical pixel.
+            y: Y coordinate of logical pixel.
+
+        Returns:
+            Palette index of logical pixel at (x, y).
+        """
+        
         color = None
         for sub_y in range(self.pixel_size.y):
             for sub_x in range(self.pixel_size.x):

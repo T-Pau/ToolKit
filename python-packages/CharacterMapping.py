@@ -1,29 +1,49 @@
+# CharacterMapping -- Map Unicode characters to native encoding.
+# Copyright (C) Dieter Baron
+#
+# The author can be contacted at <dillo@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 """
-  CharacterMapping -- Map Unicode characters to native encoding.
-  Copyright (C) Dieter Baron
+This module maps Unicode characters to native encoding.
 
-  The author can be contacted at <dillo@tpau.group>.
+Source characters can be specified as Unicode characters (`"<character>"` or `'<character>'`), as decimal values (`<number>`), or as hexadecimal values (`0x<number>`).
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. The names of the authors may not be used to endorse or promote
-     products derived from this software without specific prior
-     written permission.
+Destination characters are specified as integer values.
 
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
-  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+Mapping specifications can be given as a list or a string:
+
+- A list specification has the following formats:
+
+    - For single character mapping: `[<source>, <target>]`
+
+    - For range mapping: `[<source_start>, <source_end>, <target_start>]`
+
+- A string specification has the following format:
+
+    - For single character mapping: `<source>:<target>`
+
+    - For range mapping: `<source_start>-<source_end>:<target_start>`
 """
 
 import re
@@ -32,6 +52,8 @@ pattern_hex = r"(?:0x|$)([0-9a-fA-F]+)(.*)"
 pattern_dec = r"([0-9]+)(.*)"
 
 class CharacterMapping:
+    """Map Unicode characters to native encoding."""
+
     @staticmethod
     def petscii():
         return CharacterMapping([
@@ -59,12 +81,24 @@ class CharacterMapping:
             ["┛", 0xbd]
         ])
 
-    def __init__(self, mappings=[]):
+    def __init__(self, mappings: list[list[int|str]|str] = []):
+        """Initialize character mapping.
+
+        Args:
+            mappings: List of mappings to add.
+        """
+
         self.charmap = {}
         for mapping in mappings:
             self.add_mapping(mapping)
     
-    def add_mapping(self, arguments):
+    def add_mapping(self, arguments: list[int|str] | str) -> None:
+        """Add a mapping.
+
+        Args:
+            arguments: Mapping to add.
+        """
+
         if type(arguments) is list:
             if len(arguments) == 2:
                 self.add_single(arguments[0], arguments[1])
@@ -89,7 +123,15 @@ class CharacterMapping:
                 raise RuntimeError("trailing garbage in map specification")
             self.add_range(source_start, source_end, target)
 
-    def add_range(self, source_start, source_end, target):
+    def add_range(self, source_start: int | str, source_end: int | str, target: int):
+        """Add a range of mappings.
+
+        Args:
+            source_start: Start of Unicode character range.
+            source_end: End of Unicode character range.
+            target: Start of native character range.
+        """
+
         if type(source_start) == str:
             source_start = ord(source_start)
         if type(source_end) == str:
@@ -98,12 +140,28 @@ class CharacterMapping:
             self.charmap[chr(source)] = target.to_bytes(1, "little")
             target += 1
 
-    def add_single(self, character, target):
+    def add_single(self, character: int | str, target: int):
+        """Add a single mapping.
+
+        Args:
+            character: Unicode character.
+            target: Native character.
+        """
+
         if type(character) == int:
             character = chr(character)
         self.charmap[character] = target.to_bytes(1, "little")
 
-    def encode(self, string):
+    def encode(self, string: str) -> bytes:
+        """Encode Unicode string.
+
+        Args:
+            string: String to encode.
+
+        Returns:
+            Encoded string.
+        """
+
         result = b""
         for character in string:
             if character not in self.charmap:
@@ -113,19 +171,19 @@ class CharacterMapping:
 
     # Private methods
 
-    def parse_source(self, arguments):
+    def parse_source(self, arguments: str) -> tuple[int | str, str]:
         arguments.strip()
-        if arguments[0] == "'" or arguments[0 == '"']:
+        if arguments[0] == "'" or arguments[0] == '"':
             if arguments[3] != arguments[0]:
                 raise RuntimeError("character map source longer than one character")
             return (arguments[2], arguments[3:].strip())
         else:
             return self.parse_int(arguments, 0xffff)
 
-    def parse_target(self, arguments):
+    def parse_target(self, arguments: str) -> tuple[int, str]:
         return self.parse_int(arguments, 0xff)
 
-    def parse_int(self, arguments, max_value):
+    def parse_int(self, arguments: str, max_value: int) -> tuple[int, str]:
             if match := re.match(pattern_hex, arguments):
                 value = int("0x" + match.group(1))
                 arguments = match.group(2)
