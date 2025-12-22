@@ -45,24 +45,23 @@ class Option(enum.Enum):
     """Optional features for Script class.
     
     Attributes:
-        symbol_name: Specify symbol name with `-n`/`--name` option.
         alignment: Specify alignment with `-a`/`--alignment` and `--align` options.
         assembler_output: Create assembler source file.
+        assembler: Collection to enable assembler-related options (section, assembler_output).
         binary_output: Open output file in binary mode.
         defines: Define preprocessor symbols with  `-D` option.
         dyndep: Enable dynamic dependency discovery with `--dyndep` and `--built-files` options.
-        file_reader: Use FileReader to read input files.
         file_reader_preprocessor: Enable preprocessing in FileReader.
+        file_reader: Use FileReader to read input files.
         include_directories: Specify include directories with `-I` options.
+        preprocessor: Collection to enable preprocessor-related options (defines, file_reader, file_reader_preprocessor).
         runlength_encode: Enable runlength encoding with `-r`/`--runlength` option.
         section: Specify assembler section with `-s`/`--section` option.
-        verbose: Enable verbose output with `-v`/`--verbose` option.
-        assembler: Collection to enable assembler-related options (section, assembler_output).
-        preprocessor: Collection to enable preprocessor-related options (defines, file_reader, file_reader_preprocessor).
+        symbol_name: Specify symbol name with `-n`/`--name` option.
         symbol: Collection to enable symbol-related options (assembler, symbol_name, alignment).
+        verbose: Enable verbose output with `-v`/`--verbose` option.
     """
     
-    symbol_name = enum.auto()
     alignment = enum.auto()
     assembler_output = enum.auto()
     binary_output = enum.auto()
@@ -71,8 +70,10 @@ class Option(enum.Enum):
     file_reader = enum.auto()
     file_reader_preprocessor = enum.auto()
     include_directories = enum.auto()
+    output_optional = enum.auto()
     runlength_encode = enum.auto()
     section = enum.auto()
+    symbol_name = enum.auto()
     verbose = enum.auto()
 
     # collections
@@ -173,7 +174,8 @@ class Script:
                 self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
                 if not self.output.run(lambda: self.execute()):
                     sys.exit(1)
-                self.dependencies.check()
+                if not self.options.is_set(Option.output_optional):
+                    self.dependencies.check()
         except Exception as ex:
             if "TOOLKIT_DEBUG" in os.environ:
                 traceback.print_exception(ex)
@@ -198,6 +200,15 @@ class Script:
         if self.dependencies is not None:
             self.dependencies.add(file)
     
+    def warning(self, message: str) -> None:
+        """Print warning.
+        
+        Args:
+            message: Warning message.
+        """
+        
+        self.output.warning(message)
+
     def error(self, message: str) -> None:
         """Report an error and mark script as failed.
         
@@ -420,7 +431,8 @@ class Script:
             self.output.fail()
         if self.dependencies is not None:
             self.dependencies.write()
-            self.dependencies.check()
+            if self.options.is_set(Option.assembler_output):
+                self.dependencies.check()
     
     def create_dyndep(self) -> None:
         self.common_preparations()
