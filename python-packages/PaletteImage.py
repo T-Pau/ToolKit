@@ -38,19 +38,29 @@ PixelSize = namedtuple("PixelSize", "x y")
 class PaletteImage:
     """Convert image to palette indices."""
 
-    def __init__(self, filename: str, palette: Palette, pixel_size: PixelSize = PixelSize(1, 1)) -> None:
+    def __init__(self, palette: Palette, filename: str|None = None, image:Image.Image|None = None, pixel_size: PixelSize = PixelSize(1, 1)) -> None:
         """Initialize PaletteImage.
 
         Args:
             filename: Name of file to load image from.
             palette: Palette to use.
+            image: Image to use.
             pixel_size: Size of logical pixels.
         """
 
         self.palette = copy(palette)
         self.filename = filename
         self.pixel_size = pixel_size
-        self.image = Image.open(filename)
+
+        if filename is not None:
+            self.image = Image.open(filename)
+            if image is not None:
+                raise RuntimeError(f"both filename and image given for PaletteImage")
+        elif image is not None:
+            self.image = image
+        else:
+            raise RuntimeError(f"neither filename nor image given for PaletteImage")
+        
         if pixel_size.x < 1 or pixel_size.y < 1:
             raise RuntimeError(f"invalid pixel size {pixel_size} at {self.filename}")
         if self.image.width % self.pixel_size.x != 0:
