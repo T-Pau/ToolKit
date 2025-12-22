@@ -48,7 +48,7 @@ class AtomicOutput:
     def set_filename(self, filename: str, binary: bool = False):
         """Set output filename.
         
-        Args:
+        Arguments:
             filename: The output filename.
             binary: Whether to open the file in binary mode.
         
@@ -109,7 +109,7 @@ class AtomicOutput:
     def abort(self, message: str) -> None:
         """Abort the operation with an error message and discard the output.
         
-        Args:
+        Arguments:
             message: The error message.
         """
 
@@ -134,10 +134,19 @@ class AtomicOutput:
         if self.temp_name and os.path.exists(self.temp_name):
             os.remove(self.temp_name)
 
+    def warning(self, message: str) -> None:
+        """Print warning.
+        
+        Arguments:
+            message: Warning message.
+        """
+
+        print(message, file=sys.stderr)
+
     def error(self, message: str) -> None:
         """Report an error and mark the output as failed.
         
-        Args:
+        Arguments:
             message: The error message.
         """
 
@@ -147,7 +156,7 @@ class AtomicOutput:
     def run(self, code: Callable[[], None]) -> bool:
         """Run code that produces the output file. If an uncaught exception occurs, the output file is discarded.
 
-        Args:
+        Arguments:
             code: The function to call to produce the output file.
         """
 
