@@ -1,38 +1,43 @@
+# Dependencies -- create gcc style dependencies file
+# Copyright (C) Dieter Baron
+#
+# The author can be contacted at <dillo@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 import os.path
 import sys
 
-"""
-  Dependencies -- create gcc style dependencies file
-  Copyright (C) Dieter Baron
-
-  The author can be contacted at <dillo@tpau.group>.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. The names of the authors may not be used to endorse or promote
-     products derived from this software without specific prior
-     written permission.
-
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
-  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-"""
-
-import sys
-
 class Dependencies:
+    """Create and check gcc style dependencies file."""
+
     def __init__(self, filename: str, target: str) -> None:
+        """Initialize Dependencies.
+        
+        Arguments:
+            filename: name of dependencies file to create
+            target: name of target file
+        """
+
         self.dependencies = set()
         self.filename = filename
         self.target = target
@@ -44,15 +49,25 @@ class Dependencies:
                 self.dependencies.add(filename)
 
     def add(self, filename: str) -> None:
+        """Add dependency.
+
+        Arguments:
+            filename: name of dependency file to add
+        """
+
         self.dependencies.add(filename)
 
     def write(self) -> None:
+        """Write dependencies file."""
+
         if self.filename is not None:
             with open(self.filename, "w") as file:
                 print(f"{self.target}: ", end="", file=file)
                 print(" ".join(self.dependencies), file=file)
 
     def check(self) -> None:
+        """Check whether output and dependency files are created and newer than dependencies."""
+
         if not os.path.exists(self.target):
             raise RuntimeError(f"failed to create output file '{self.target}'")
         target_mtime = os.path.getmtime(self.target)
