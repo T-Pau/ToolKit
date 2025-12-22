@@ -1,30 +1,28 @@
-"""
-  CharacterImage -- convert image to characters
-  Copyright (C) Dieter Baron
-
-  The author can be contacted at <dillo@tpau.group>.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. The names of the authors may not be used to endorse or promote
-     products derived from this software without specific prior
-     written permission.
-
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
-  OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-"""
+# CharacterImage -- convert image to characters
+# Copyright (C) Dieter Baron
+#
+# The author can be contacted at <dillo@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from copy import copy
 
@@ -33,6 +31,8 @@ import PaletteImage
 
 
 class CharacterImage:
+    """Access characters from an image."""
+
     default_palette = Palette({
         0x00000000: 1,
         0x00ffffff: 0,
@@ -41,7 +41,19 @@ class CharacterImage:
         0x0040ff40: None,
     })
 
-    def __init__(self, filename, character_width, character_height, palette=None, additional_palette=None, pixel_size=None):
+    def __init__(self, character_width: int, character_height: int, filename: str|None = None, image=None, palette=None, additional_palette=None, pixel_size=None):
+        """Initialize CharacterImage.
+        
+        Arguments:
+            character_width: width of a character in pixels
+            character_height: height of a character in pixels
+            filename: filename of image to load
+            image: image to use
+            palette: Palette to use
+            additional_palette: additional colors to add to palette
+            pixel_size: size of logical pixels
+        """
+
         if pixel_size is None:
             pixel_size = PaletteImage.PixelSize(1, 1)
         if palette is None:
@@ -50,7 +62,7 @@ class CharacterImage:
         if additional_palette is not None:
             self.palette.add_colors(additional_palette)
         self.pixel_width = palette.bit_length()
-        self.image = PaletteImage.PaletteImage(filename, self.palette, pixel_size)
+        self.image = PaletteImage.PaletteImage(filename=filename, image=image, palette=self.palette, pixel_size=pixel_size)
         self.character_width = character_width
         self.character_height = character_height
         if self.pixel_width not in (1, 2, 4, 8):
@@ -68,12 +80,29 @@ class CharacterImage:
         self.character_size = self.character_width // self.pixels_per_byte * self.character_height
         self.cache = {}
 
-    def get(self, index):
+    def get(self, index: int) -> bytes|None:
+        """Get character at given index.
+        
+        Arguments:
+            index: index of character to get
+        Returns:
+            bytes of character, or None if character is a hole
+        """
+        
         if index in self.cache:
             return self.cache[index]
         return self.get_xy(index % self.width, index // self.width)
 
-    def get_xy(self, x, y):
+    def get_xy(self, x: int, y: int) -> bytes|None:
+        """Get character at given coordinates.
+
+        Arguments:
+            x: x coordinate of character to get
+            y: y coordinate of character to get
+        Returns:
+            bytes of character, or None if character is a hole
+        """
+        
         index = x + y * self.width
         if index in self.cache:
             return self.cache[index]
