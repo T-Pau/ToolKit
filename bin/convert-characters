@@ -372,7 +372,7 @@ class ConvertCharacters(Script.Script):
             palette = CharacterImage.CharacterImage.default_palette
         else:
             palette = Palette(spec.palette)
-        return CharacterImage.CharacterImage(filename, self.char_width // palette.bit_length(), self.char_height,
+        return CharacterImage.CharacterImage(self.char_width // palette.bit_length(), self.char_height, filename,
                                                 palette=palette, additional_palette=spec.additional_palette,
                                                 pixel_size=spec.pixel_size)
 

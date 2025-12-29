@@ -65,12 +65,12 @@ class ConvertSprites(Script.Script):
             pixel_size=PaletteImage.PixelSize(2, 1)
             width = 4
 
-        charset = CharacterImage.CharacterImage(self.input_filename(), width, 1, pixel_size=pixel_size, palette=palette)
+        charset = CharacterImage.CharacterImage(width, 1, self.input_filename(), pixel_size=pixel_size, palette=palette)
 
         if charset.width % 3 != 0:
             raise RuntimeError("image width not multiple of 24")
         if charset.height % 21 != 0:
-            raise RuntimeError("image width not multiple of 21")
+            raise RuntimeError("image height not multiple of 21")
 
         binary = bytearray()
 

@@ -85,7 +85,7 @@ class CellImage:
         pixel_size = layout.pixel_size
         if pixel_size is None:
             pixel_size = PaletteImage.PixelSize(1, 1)
-        self.image = PaletteImage.PaletteImage(filename, layout.palette, pixel_size)
+        self.image = PaletteImage.PaletteImage(layout.palette, filename, pixel_size=pixel_size)
         self.cell_width = layout.cell_width
         self.cell_height = layout.cell_height
         if self.image.width % self.cell_width != 0:
