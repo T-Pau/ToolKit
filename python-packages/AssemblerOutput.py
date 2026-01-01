@@ -43,6 +43,8 @@ class AssemblerOutput:
         self.file = file
         self.current_section = None
         self.current_visibility = "private"
+        self.last_line_empty = True
+        self.partial_line = False
 
     def begin_object(self, name: str, section: str | None = None, visibility: str | None = None, alignment: int | None = None) -> None:
         """Begin a new object.
@@ -63,7 +65,7 @@ class AssemblerOutput:
             visibility_string = f".{visibility} "
         if alignment is not None:
             alignment_string = f" .align ${hex(alignment)[2:]}"
-        print(f"{visibility_string}{name}{alignment_string} {{", file=self.file)
+        self._print_line(f"{visibility_string}{name}{alignment_string} {{")
 
     def byte(self, value: Any) -> None:
         """Add a byte value as `.data` to current object.
@@ -71,7 +73,7 @@ class AssemblerOutput:
         Args:
             value: The byte value.
         """
-        print(f"    .data {value}", file=self.file)
+        self._print_line(f"    .data {value}")
 
     def bytes(self, bytes_array: bytes) -> None:
         """Add a byte array as `.data` to current object.
@@ -83,16 +85,16 @@ class AssemblerOutput:
         i = 0
         for byte in bytes_array:
             if i == 0:
-                self.file.write("    .data ")
+                self._print("    .data ")
             else:
-                self.file.write(", ")
-            self.file.write(f'${byte:02x}')
+                self._print(", ")
+            self._print(f'${byte:02x}')
             i += 1
             if i == 8:
-                self.file.write("\n")
+                self._end_line()
                 i = 0
         if i > 0:
-            self.file.write("\n")
+            self._end_line()
 
     def bytes_object(self, name: str, bytes_array: "bytes", section: str = "data", visibility: str | None = None, alignment: int | None = None) -> None:
         """Create an object containing a byte array.
@@ -139,7 +141,7 @@ class AssemblerOutput:
             comment: The comment text.
         """
 
-        print(f"; {comment}", file=self.file)
+        self._print_line(f"; {comment}")
 
     def constant(self, name: str, value: Any) -> None:
         """Define a constant.
@@ -149,7 +151,7 @@ class AssemblerOutput:
             value: The value of the constant.
         """
 
-        print(f"{name} = {value}", file=self.file)
+        self._print_line(f"{name} = {value}")
 
     def data_object(self, name: str, data: Any, section: str = "data", visibility: str | None = None, alignment: int | None = None) -> None:
         """Create an object containing data.
@@ -182,25 +184,29 @@ class AssemblerOutput:
         for v in value:
             if index % line_length == 0:
                 if index > 0:
-                    print(file=self.file)
-                print(f"    .data ", end="", file=self.file)
+                    self._end_line()
+                self._print(f"    .data ")
             else:
-                print(", ", end="", file=self.file)
-            print(f"{v}", end="", file=self.file)
+                self._print(", ")
+            self._print(f"{v}")
             if encoding is not None:
-                print(f":{encoding}", file=self.file)
+                self._print(f":{encoding}")
             index += 1
-        print("", file=self.file)
+        self._end_line()
 
-    def empty_line(self) -> None:
-        """Add an empty line to the output."""
+    def empty_line(self, force: bool = False) -> None:
+        """Add an empty line to the output.
+        
+        Args:
+            force: Whether to force an empty line even if the last line was empty."""
 
-        print("", file=self.file)
+        if force or not self.last_line_empty:
+            self._print_line("")
 
     def end_object(self) -> None:
         """End the current object."""
 
-        print("}", file=self.file)
+        self._print_line("}")
 
     def header(self, input_file: str | None) -> None:
         """Add standard file header comment.
@@ -228,7 +234,7 @@ class AssemblerOutput:
         visibility_string = ""
         if visibility is not None:
             visibility_string = f".{visibility} "
-        print(f"{visibility_string}{name}:", file=self.file)
+        self._print_line(f"{visibility_string}{name}:")
 
     def parts(self, name: str, parts: list, include_count: bool = True, include_index: bool = True, names: list | None = None) -> None:
         """Create multiple objects from parts.
@@ -258,19 +264,18 @@ class AssemblerOutput:
     def pre_else(self) -> None:
         """Add a preprocessor else directive."""
 
-        print(f".pre_else", file=self.file)
+        self._print_line(f".pre_else")
 
     def pre_end(self) -> None:
         """Add a preprocessor end directive."""
-        print(f".pre_end", file=self.file)
-
+        self._print_line(f".pre_end")
     def pre_if(self, predicate: str) -> None:
         """Add a preprocessor if directive.
 
         Args:
             predicate: The predicate for the if directive.
         """
-        print(f".pre_if {predicate}", file=self.file)
+        self._print_line(f".pre_if {predicate}")
 
     def string(self, value: str, encoding: str | None = None, nul_terminate: bool = False) -> None:
         """Add a string as `.data` to current object.
@@ -281,12 +286,12 @@ class AssemblerOutput:
             nul_terminate: Whether to add a NUL terminator.
         """
 
-        print(f"    .data \"{value}\"", end="", file=self.file)
+        self._print(f"    .data \"{value}\"")
         if encoding is not None:
-            print(f":{encoding}", end="", file=self.file)
+            self._print(f":{encoding}")
         if nul_terminate:
-            print(", 0", end="", file=self.file)
-        print("", file=self.file)
+            self._print(", 0")
+        self._end_line()
 
     def section(self, section: str) -> None:
         """Change current section.
@@ -297,7 +302,7 @@ class AssemblerOutput:
 
         if self.current_section != section:
             self.empty_line()
-            print(f".section {section}", file=self.file)
+            self._print_line(f".section {section}")
             self.current_section = section
 
     def visibility(self, visibility: str) -> None:
@@ -309,7 +314,7 @@ class AssemblerOutput:
 
         if self.current_visibility != visibility:
             self.empty_line()
-            print(f".visibility {visibility}", file=self.file)
+            self._print_line(f".visibility {visibility}")
             self.current_visibility = visibility
 
     def word(self, value: Any) -> None:
@@ -319,4 +324,36 @@ class AssemblerOutput:
             value: The word value.
         """
 
-        print(f"    .data {value}:2", file=self.file)
+        self._print_line(f"    .data {value}:2")
+
+    def _print_line(self, line: str) -> None:
+        """Print a line to the output file.
+
+        Args:
+            line: The line to print.
+        """
+
+        self._end_line()
+        print(line, file=self.file)
+        self.last_line_empty = line == ""
+
+    def _print(self, text: str) -> None:
+        """Print partial line to the output file.
+
+        Args:
+            text: The text to print.
+        """
+
+        print(text, end="", file=self.file)
+        if not self.partial_line:
+            self.last_line_empty = text == ""
+        elif text != "":
+            self.last_line_empty = False
+        self.partial_line = True
+
+    def _end_line(self) -> None:
+        """End the current line in the output file."""
+
+        if self.partial_line:
+            print("", file=self.file)
+            self.partial_line = False
