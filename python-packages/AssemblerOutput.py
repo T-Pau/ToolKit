@@ -220,7 +220,7 @@ class AssemblerOutput:
             comment += f" from {input_file}"
         comment += "."
         self.comment(comment)
-        self.comment(f"Do not edit.")
+        self.comment("Do not edit.")
         self.empty_line()
 
     def label(self, name: str, visibility: str | None = None) -> None:
