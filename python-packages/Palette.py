@@ -395,3 +395,20 @@ global_colors = {
     "white": 0xffffff,
     "transparent": 0xff000000
 }
+
+def get_palette(name: str) -> Palette:
+    """Return the palette with the given name.
+
+    Args:
+        name: name of the palette.
+
+    Returns:
+        The palette with the given name.
+
+    Raises:
+        KeyError: If the palette name is unknown.
+    """
+
+    if name not in palettes:
+        raise KeyError(f"unknown palette '{name}'")
+    return palettes[name]

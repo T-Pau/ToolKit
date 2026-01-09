@@ -24,6 +24,10 @@ rule convert-sprites
     command = {{$bin_directory/convert-sprites}} -M $depfile $flags -o $out -n $name $in
     depfile = $out.d
 
+rule convert-spritesheet
+    command = {{$bin_directory/convert-spritesheet}} -M $depfile $flags -o $out $in
+    depfile = $out.d
+
 rule create-disk
     command = {{$bin_directory/create-disk}} -M $depfile $flags -o $out $in
     depfile = $out.d

@@ -97,3 +97,24 @@ class PaletteImage:
                 elif color != sub_color:
                     raise RuntimeError(f"non-uniform logical pixel at {self.filename}:({image_x},{image_y})")
         return color
+
+class Window:
+    def __init__(self, image: "PaletteImage|Window", x_offset: int, y_offset: int, width: int, height: int) -> None:
+        if isinstance(image, Window):
+            self.image = image.image
+            self.x_offset = image.x_offset + x_offset
+            self.y_offset = image.y_offset + y_offset
+        else:
+            self.image = image
+            self.x_offset = x_offset
+            self.y_offset = y_offset
+        self.width = width
+        self.height = height
+
+        if self.x_offset < 0 or self.x_offset + self.width > self.image.width or self.y_offset < 0 or self.y_offset + self.height > self.image.height:
+            raise RuntimeError("window larger than image")
+
+    def get(self, x: int, y: int) -> int | None:
+        if x < 0 or x >= self.width or y < 0 or y >= self.height:
+            raise RuntimeError(f"invalid coordinates ({x}, {y})")
+        return self.image.get(self.x_offset + x, self.y_offset + y)

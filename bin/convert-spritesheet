@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+
+# Copyright (C) Dieter Baron
+#
+# This file is part of the T'Pau Toolkit.
+# The authors can be contacted at <toolkit@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS "AS IS" AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+from copy import copy
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
+
+import Charset
+import Palette
+import PaletteImage
+import RunlengthEncoder
+import Script
+import YAMLSpec
+
+class ImageSpec():
+    def __init__(self, yaml_spec: YAMLSpec.YAMLSpec) -> None:
+        self.count = None
+        self.filename_pattern = None
+        self.filename = None
+        if "filename-pattern" in yaml_spec.yaml_spec:
+            self.filename_pattern = yaml_spec.get_str("filename-pattern")
+            self.first = yaml_spec.get_int("first", 1)
+            self.last = yaml_spec.get_int("last", 1)
+        else:
+            self.filename = yaml_spec.get_str("filename")
+
+class SheetSpec():
+    def __init__(self, yaml_spec: YAMLSpec.YAMLSpec) -> None:
+        self.max_layers = yaml_spec.get_int("max_layers", 1)
+        self.image_spec = ImageSpec(yaml_spec.get_spec("image"))
+
+class Spec():
+    def __init__(self, spec_file: str) -> None:
+        spec = YAMLSpec.YAMLSpec(spec_file)
+        self.runlength_encoding = spec.get_bool("runlength-encoding", False)
+        self.pointer_offset = spec.get("pointer-offset", default_value=0, value_type=[str, int])
+        self.name_prefix = spec.get_str("name_prefix", "sprite")
+        self.sheets = [SheetSpec(sheet_spec) for sheet_spec in spec.get_spec_list("sheets", allow_single=True)]
+
+
+
+class ConvertSpriteSheet(Script.Script):
+    def __init__(self) -> None:
+        super().__init__("Convert sprite image.", Script.Option.assembler, Script.Option.include_directories)
+        self.arg_parser.add_argument("specs")
+
+    # Get filename of input file.
+    def input_filename(self):
+        return self.args.specs
+    
+    def execute_sub(self):
+        spec = Spec(self.input_filename())
+
+        for sheet in spec.sheets:
+            self.convert_sheet(sheet, spec)
+    
+    def convert_sheet(self, sheet: SheetSpec, spec: Spec):
+        sprite_images = self.load_sprites(sheet.image_spec)
+        sprite_sheet = Charset.Charset(len(sprite_images) * sheet.max_layers, b'\x00' * 64)
+        pointers = []
+        colors = []
+
+        for sprite_image in sprite_images:
+            sprites = []
+            color_layer = {}
+            layer_colors = []
+            for y in range(0, sprite_image.height):
+                for x in range(0, sprite_image.width):
+                    pixel = sprite_image.get(x, y)
+                    if pixel != None:
+                        if pixel not in color_layer:
+                            if len(color_layer) >= sheet.max_layers:
+                                raise RuntimeError(f"too many colors in sprite ({x},{y})")
+                            layer = len(color_layer)
+                            color_layer[pixel] = layer
+                            layer_colors.append(pixel)
+                            sprites.append(bytearray([0x00] * 64))
+                        else:
+                            layer = color_layer[pixel]
+                        sprites[layer][y * 3 + (x // 8)] |= (1 << (7 - (x % 8)))
+            
+            layer_pointers = []
+            for sprite in sprites:
+                layer_pointers.append(sprite_sheet.add(bytes(sprite)))
+            pointers.append(layer_pointers)
+            colors.append(layer_colors)
+
+        layers = max(len(p) for p in pointers)
+        for p in pointers:
+            while len(p) < layers:
+                p.append(sprite_sheet.add(bytes([0x00] * 64)))
+        for c in colors:
+            while len(c) < layers:
+                c.append(0)
+        if self.assembler is None:
+            raise RuntimeError("internal error: assembler not initialized")
+        self.assembler.constant(f"{spec.name_prefix}_LAYERS".upper(), layers)
+        self.assembler.constant(f"{spec.name_prefix}_SPRITES".upper(), len(sprite_images))
+        self.assembler.constant(f"{spec.name_prefix}_SPRITE_COUNT".upper(), sprite_sheet.max_index + 1)
+        if isinstance(spec.pointer_offset, int):
+            pointers = [[ptr + spec.pointer_offset for ptr in p] for p in pointers]
+        else:
+            pointers = [[f"{spec.pointer_offset} + {ptr}" for ptr in p] for p in pointers]
+        self.assembler.begin_object(f"{spec.name_prefix}_pointers")
+        for p in pointers:
+            self.assembler.data(p)
+        self.assembler.end_object()
+        self.assembler.begin_object(f"{spec.name_prefix}_colors")
+        for c in colors:
+            self.assembler.data(c)
+        self.assembler.end_object()
+        sprite_data = sprite_sheet.get_bytes()
+        if spec.runlength_encoding:
+            encoder = RunlengthEncoder.RunlengthEncoder()
+            encoder.add_bytes(sprite_sheet.get_bytes())
+            sprite_data = encoder.end()
+        self.assembler.bytes_object(f"{spec.name_prefix}_sprites", sprite_data)
+
+    def load_sprites(self, image_spec: ImageSpec):
+        palette = copy(Palette.c64)
+        palette.add_color(Palette.get_color("transparent"), None)
+        images = []
+        if image_spec.filename_pattern is not None:
+            for i in range(image_spec.first, image_spec.last + 1):
+                filename = self.find_file(image_spec.filename_pattern % i)
+                image = PaletteImage.PaletteImage(filename=filename, palette=palette)
+                images.append(image)
+        elif image_spec.filename is not None:
+            image = PaletteImage.PaletteImage(filename=self.find_file(image_spec.filename), palette=palette)
+            images.append(image)
+
+        sprites = []
+        for image in images:
+            if image.width % 24 != 0:
+                raise RuntimeError(f"image width not multiple of 24 in {image.filename}")
+            if image.height % 21 != 0:
+                raise RuntimeError(f"image height not multiple of 21 in {image.filename}")
+            rows = image.height // 21
+            cols = image.width // 24
+            if rows == 1 and cols == 1:
+                sprites.append(image)
+                continue
+            for y in range(0, rows):
+                for x in range(0, cols):
+                    sprites.append(PaletteImage.Window(image, x * 24, y * 21, 24, 21))
+        return sprites
+
+ConvertSpriteSheet().run()
