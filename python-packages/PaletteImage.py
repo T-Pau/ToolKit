@@ -30,10 +30,12 @@
 from copy import copy
 from PIL import Image
 from collections import namedtuple
+from typing import TypeAlias
 
 from Palette import Palette
 
 PixelSize = namedtuple("PixelSize", "x y")
+
 
 class PaletteImage:
     """Convert image to palette indices."""
@@ -118,3 +120,5 @@ class Window:
         if x < 0 or x >= self.width or y < 0 or y >= self.height:
             raise RuntimeError(f"invalid coordinates ({x}, {y})")
         return self.image.get(self.x_offset + x, self.y_offset + y)
+
+LogicalImage: TypeAlias = PaletteImage | Window

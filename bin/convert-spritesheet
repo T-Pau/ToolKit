@@ -26,10 +26,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from copy import copy
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python-packages"))
+
+import enum
+from copy import copy
 
 import Charset
 import Palette
@@ -37,6 +39,10 @@ import PaletteImage
 import RunlengthEncoder
 import Script
 import YAMLSpec
+
+class OutputType(enum.Enum):
+    sprite_set = "sprite-set"
+    frames = "frames"
 
 class ImageSpec():
     def __init__(self, yaml_spec: YAMLSpec.YAMLSpec) -> None:
@@ -54,15 +60,51 @@ class SheetSpec():
     def __init__(self, yaml_spec: YAMLSpec.YAMLSpec) -> None:
         self.max_layers = yaml_spec.get_int("max_layers", 1)
         self.image_spec = ImageSpec(yaml_spec.get_spec("image"))
+        self.output_type = OutputType(yaml_spec.get_str("output-type", "sprite-set"))
 
 class Spec():
     def __init__(self, spec_file: str) -> None:
         spec = YAMLSpec.YAMLSpec(spec_file)
         self.runlength_encoding = spec.get_bool("runlength-encoding", False)
         self.pointer_offset = spec.get("pointer-offset", default_value=0, value_type=[str, int])
-        self.name_prefix = spec.get_str("name_prefix", "sprite")
+        self.name_prefix = spec.get_str("name-prefix", "sprite")
         self.sheets = [SheetSpec(sheet_spec) for sheet_spec in spec.get_spec_list("sheets", allow_single=True)]
 
+class Frame():
+    def __init__(self, image: PaletteImage.LogicalImage) -> None:
+        self.sprites = []
+        self.colors = []
+
+        self._create_layers(image)
+
+    def __len__(self) -> int:
+        return len(self.sprites)
+    
+    def pad_to_layers(self, layers: int) -> None:
+        while len(self.sprites) < layers:
+            self.sprites.append(bytes([0x00] * 64))
+            self.colors.append(0)
+
+    def get_sprite(self, layer: int) -> bytes:
+        return bytes(self.sprites[layer])
+    
+    def get_color(self, layer: int) -> int:
+        return self.colors[layer]
+
+    def _create_layers(self, image: PaletteImage.LogicalImage) -> None:
+        color_layer = {}
+        for y in range(0, image.height):
+            for x in range(0, image.width):
+                pixel = image.get(x, y)
+                if pixel != None:
+                    if pixel not in color_layer:
+                        layer = len(color_layer)
+                        color_layer[pixel] = layer
+                        self.colors.append(pixel)
+                        self.sprites.append(bytearray([0x00] * 64))
+                    else:
+                        layer = color_layer[pixel]
+                    self.sprites[layer][y * 3 + (x // 8)] |= (1 << (7 - (x % 8)))
 
 
 class ConvertSpriteSheet(Script.Script):
@@ -82,46 +124,84 @@ class ConvertSpriteSheet(Script.Script):
     
     def convert_sheet(self, sheet: SheetSpec, spec: Spec):
         sprite_images = self.load_sprites(sheet.image_spec)
-        sprite_sheet = Charset.Charset(len(sprite_images) * sheet.max_layers, b'\x00' * 64)
-        pointers = []
-        colors = []
+        frames = []
 
         for sprite_image in sprite_images:
-            sprites = []
-            color_layer = {}
-            layer_colors = []
-            for y in range(0, sprite_image.height):
-                for x in range(0, sprite_image.width):
-                    pixel = sprite_image.get(x, y)
-                    if pixel != None:
-                        if pixel not in color_layer:
-                            if len(color_layer) >= sheet.max_layers:
-                                raise RuntimeError(f"too many colors in sprite ({x},{y})")
-                            layer = len(color_layer)
-                            color_layer[pixel] = layer
-                            layer_colors.append(pixel)
-                            sprites.append(bytearray([0x00] * 64))
-                        else:
-                            layer = color_layer[pixel]
-                        sprites[layer][y * 3 + (x // 8)] |= (1 << (7 - (x % 8)))
-            
-            layer_pointers = []
-            for sprite in sprites:
-                layer_pointers.append(sprite_sheet.add(bytes(sprite)))
-            pointers.append(layer_pointers)
-            colors.append(layer_colors)
+            frames.append(Frame(sprite_image))
+            if len(frames[-1]) > sheet.max_layers:
+                raise RuntimeError(f"sprite in {sprite_image.filename} has {len(frames[-1])} layers, exceeds max of {sheet.max_layers}")
 
-        layers = max(len(p) for p in pointers)
-        for p in pointers:
-            while len(p) < layers:
-                p.append(sprite_sheet.add(bytes([0x00] * 64)))
-        for c in colors:
-            while len(c) < layers:
-                c.append(0)
+        layers = max(len(frame) for frame in frames)
+        for frame in frames:
+            frame.pad_to_layers(layers)
+
         if self.assembler is None:
             raise RuntimeError("internal error: assembler not initialized")
+
+        self.assembler.empty_line()
         self.assembler.constant(f"{spec.name_prefix}_LAYERS".upper(), layers)
-        self.assembler.constant(f"{spec.name_prefix}_SPRITES".upper(), len(sprite_images))
+        self.assembler.constant(f"{spec.name_prefix}_FRAMES".upper(), len(frames))
+
+        if sheet.output_type == OutputType.frames:
+            self.convert_frames(frames, layers, sheet, spec)
+        else:
+            self.convert_sprite_set(frames, layers, sheet, spec)
+
+
+    def convert_frames(self, frames: list[Frame], layers: int, sheet: SheetSpec, spec: Spec):
+        sprites = []
+
+        for frame in frames:
+            frame_sprites = []
+            for layer in range(layers):
+                sprite_data = frame.get_sprite(layer)
+                frame_sprites.append(sprite_data)
+            sprites.append(frame_sprites)
+
+        if self.assembler is None:
+            raise RuntimeError("internal error: assembler not initialized")
+
+        for operand, suffix in [("<", "low"), (">", "high")]:
+            self.assembler.begin_object(f"{spec.name_prefix}_sprites_{suffix}")
+            for index in range(len(frames)):
+                self.assembler.data(f"{operand}{spec.name_prefix}_frame_{index}")
+            self.assembler.end_object()
+
+        for index, frame_sprites in enumerate(sprites):
+            data = bytes()
+            for sprite_data in frame_sprites:
+                data += sprite_data
+            if spec.runlength_encoding:
+                encoder = RunlengthEncoder.RunlengthEncoder()
+                encoder.add_bytes(data)
+                data = encoder.end()
+            self.assembler.bytes_object(f"{spec.name_prefix}_frame_{index}", data)
+        
+        colors = [[] for _ in range(layers)]
+        for frame in frames:
+            for layer in range(layers):
+                colors[layer].append(frame.get_color(layer))
+        self.assembler.begin_object(f"{spec.name_prefix}_colors")
+        for c in colors:
+            self.assembler.data(c)
+        self.assembler.end_object() 
+
+    def convert_sprite_set(self, frames: list[Frame], layers: int, sheet: SheetSpec, spec: Spec):
+        sprite_sheet = Charset.Charset(len(frames) * layers, b'\x00')
+        pointers = []
+
+        for frame in frames:
+            frame_pointers = []
+            for layer in range(layers):
+                sprite_data = frame.get_sprite(layer)
+                sprite_color = frame.get_color(layer)
+                sprite_index = sprite_sheet.add(sprite_data)
+                frame_pointers.append(sprite_index)
+            pointers.append(frame_pointers)
+
+        if self.assembler is None:
+            raise RuntimeError("internal error: assembler not initialized")
+ 
         self.assembler.constant(f"{spec.name_prefix}_SPRITE_COUNT".upper(), sprite_sheet.max_index + 1)
         if isinstance(spec.pointer_offset, int):
             pointers = [[ptr + spec.pointer_offset for ptr in p] for p in pointers]
@@ -131,16 +211,24 @@ class ConvertSpriteSheet(Script.Script):
         for p in pointers:
             self.assembler.data(p)
         self.assembler.end_object()
-        self.assembler.begin_object(f"{spec.name_prefix}_colors")
-        for c in colors:
-            self.assembler.data(c)
-        self.assembler.end_object()
         sprite_data = sprite_sheet.get_bytes()
         if spec.runlength_encoding:
             encoder = RunlengthEncoder.RunlengthEncoder()
             encoder.add_bytes(sprite_sheet.get_bytes())
             sprite_data = encoder.end()
         self.assembler.bytes_object(f"{spec.name_prefix}_sprites", sprite_data)
+
+        colors = []
+        for frame in frames:
+            frame_colors = []
+            for layer in range(layers):
+                frame_colors.append(frame.get_color(layer))
+            colors.append(frame_colors)
+        self.assembler.begin_object(f"{spec.name_prefix}_colors")
+        for c in colors:
+            self.assembler.data(c)
+        self.assembler.end_object() 
+
 
     def load_sprites(self, image_spec: ImageSpec):
         palette = copy(Palette.c64)

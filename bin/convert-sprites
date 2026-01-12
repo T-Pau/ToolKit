@@ -45,6 +45,7 @@ class ConvertSprites(Script.Script):
         self.arg_parser.add_argument("image")
         self.arg_parser.add_argument("-m", "--multicolor", action="store_true", dest="multicolor", help="multicolor sprites")
         self.arg_parser.add_argument("-P", "--palette", metavar="COLOR0,COLOR1,...", dest="palette", help="specify color palette")
+        self.arg_parser.add_argument("--count", metavar="NAME", dest="count", help="name of constant containing number of sprites")
 
     # Get filename of input file.
     def input_filename(self):
@@ -84,6 +85,10 @@ class ConvertSprites(Script.Script):
                         binary += charset.get_xy(x + sprite_x * 3, y + sprite_y * 21)
                 zero = 0
                 binary += zero.to_bytes(1, byteorder="little")
+
+        if self.args.count:
+            self.assembler.empty_line()
+            self.assembler.constant(self.args.count, num_sprites_x * num_sprites_y)
 
         self.symbol(binary)
 
