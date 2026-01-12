@@ -143,7 +143,7 @@ class Charset:
         """Number of used characters."""
         return len(self.by_index)
 
-    def get_bytes(self, full=False):
+    def get_bytes(self, full: bool = False):
         """Get character set as bytes.
 
         Arguments:

@@ -1,3 +1,29 @@
+# Script -- implement reliable scripts with standard interface
+# Copyright (C) Dieter Baron
+#
+# The author can be contacted at <dillo@tpau.group>.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2. The names of the authors may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+# IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 from typing import Any, NoReturn, TypeAlias
 import yaml
 
@@ -55,7 +81,7 @@ class YAMLSpec:
         else:
             return None     
 
-    def get(self, key: str, default_value=None, required: bool = False, value_type: type_spec|None = None) -> Any:
+    def get(self, key: str, default_value: Any=None, required: bool = False, value_type: type_spec|None = None) -> Any:
         """Get a value from the YAML specification.
 
         Args:
@@ -143,7 +169,7 @@ class YAMLSpec:
 
         Args:
             key: The key to get.
-            subtype: The expected type of the list elements.
+            item_type: The expected type of the list elements.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
         """
@@ -162,7 +188,8 @@ class YAMLSpec:
 
         Args:
             key: The key to get.
-            subtype: The expected type of the dictionary values.
+            key_type: The expected type of the dictionary keys.
+            value_type: The expected type of the dictionary values.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
         """

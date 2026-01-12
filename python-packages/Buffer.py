@@ -1,3 +1,5 @@
+from typing import IO
+
 class Buffer:
     """Create binary data incrementally."""
 
@@ -28,7 +30,7 @@ class Buffer:
 
         Arguments:
             data: data to add (bytes or string)
-            length: total length of data after padding
+            length: pad data to this length if it is shorter
             padding: byte value to use for padding
         """
 
@@ -95,7 +97,7 @@ class Buffer:
         if len(self.data) < length:
             self.data += padding.to_bytes(1, byteorder="little") * (length - len(self.data))
 
-    def output(self, file) -> None:
+    def output(self, file: "IO[bytes]") -> None:
         """Write buffer contents to file.
 
         Arguments:

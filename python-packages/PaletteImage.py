@@ -101,7 +101,22 @@ class PaletteImage:
         return color
 
 class Window:
+    """A window into a PaletteImage."""
+
     def __init__(self, image: "PaletteImage|Window", x_offset: int, y_offset: int, width: int, height: int) -> None:
+        """Initialize window.
+        
+        Args:
+            image: Image or window to create window into.
+            x_offset: X offset of window into image.
+            y_offset: Y offset of window into image.
+            width: Width of window.
+            height: Height of window.
+
+        Raises:
+            RuntimeError: If window is larger than image.
+
+        """
         if isinstance(image, Window):
             self.image = image.image
             self.x_offset = image.x_offset + x_offset
@@ -117,6 +132,16 @@ class Window:
             raise RuntimeError("window larger than image")
 
     def get(self, x: int, y: int) -> int | None:
+        """Get palette index of logical pixel at (x, y) in window.
+
+        Args:
+            x: X coordinate of logical pixel in window.
+            y: Y coordinate of logical pixel in window.
+
+        Returns:
+            Palette index of logical pixel at (x, y) in window.
+        """
+        
         if x < 0 or x >= self.width or y < 0 or y >= self.height:
             raise RuntimeError(f"invalid coordinates ({x}, {y})")
         return self.image.get(self.x_offset + x, self.y_offset + y)
