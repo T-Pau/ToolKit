@@ -345,6 +345,7 @@ c64 = Palette([
     "light-blue",
     "grey-3"
 ])
+"""Palette for the Commodore 64 color palette."""
 
 spectrum = Palette({
     0x000000: 0, # black
@@ -379,11 +380,13 @@ spectrum = Palette({
     "bright-yellow": 14,
     "bright-white": 15
 })
+"""Palette for the ZX Spectrum color palette."""
 
 palettes = {
     "c64": c64,
     "spectrum": spectrum
 }
+"""Dictionary of standard palettes."""
 
 global_colors = {
     "black": 0x000000,
@@ -395,6 +398,7 @@ global_colors = {
     "white": 0xffffff,
     "transparent": 0xff000000
 }
+"""Dictionary of global colors."""
 
 def get_palette(name: str) -> Palette:
     """Return the palette with the given name.

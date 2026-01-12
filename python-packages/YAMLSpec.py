@@ -62,7 +62,11 @@ class YAMLSpec:
                     self._raise_type_error(str, key, suffix="key")
     
     def unknown_keys(self) -> list[str]:
-        """Return list of unknown keys in the YAML specification."""
+        """Return list of unknown keys in the YAML specification.
+        
+        Returns:
+            List of keys that have not been accessed.
+        """
 
         return [key for key in self.yaml_spec.keys() if key not in self.accessed_keys]
     
@@ -88,6 +92,14 @@ class YAMLSpec:
             key: The key to get.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+            value_type: The expected type of the value.
+
+        Returns:
+            The value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not of the expected type.
         """
 
         self.accessed_keys.add(key)
@@ -109,6 +121,13 @@ class YAMLSpec:
             key: The key to get.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+        
+        Returns:
+            The boolean value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a boolean.
         """
 
         return self.get(key, default_value=default_value, required=required, value_type=bool)
@@ -120,6 +139,13 @@ class YAMLSpec:
             key: The key to get.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+        
+        Returns:
+            The integer value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not an integer.
         """
 
         return self.get(key, default_value=default_value, required=required, value_type=int)
@@ -129,6 +155,12 @@ class YAMLSpec:
 
         Args:
             key: The key to get.
+
+        Returns:
+            The integer value, or None if not found.
+
+        Raises:
+            TypeError: If the value is not an integer.
         """
 
         return self.get(key, default_value=default_value, value_type=[int, type(None)])
@@ -140,6 +172,13 @@ class YAMLSpec:
             key: The key to get.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+        
+        Returns:
+            The string value.
+        
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a string.
         """
 
         return self.get(key, default_value=default_value, required=required, value_type=str)
@@ -149,6 +188,12 @@ class YAMLSpec:
 
         Args:
             key: The key to get.
+        
+        Returns:
+            The string value, or None if not found.
+
+        Raises:
+            TypeError: If the value is not a string.
         """
 
         return self.get(key, default_value=default_value, value_type=[str, type(None)])
@@ -160,6 +205,13 @@ class YAMLSpec:
             key: The key to get.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+        
+        Returns:
+            The float value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a float.
         """
 
         return self.get(key, default_value=default_value, required=required, value_type=[float, int])
@@ -172,6 +224,13 @@ class YAMLSpec:
             item_type: The expected type of the list elements.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+
+        Returns:
+            The list value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a list or if any element is not of the expected type.
         """
 
         if default_value is None:
@@ -192,6 +251,13 @@ class YAMLSpec:
             value_type: The expected type of the dictionary values.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+        
+        Returns:
+            The dictionary value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a dictionary or if any key or value is not of the expected type.
         """
 
         if default_value is None:
@@ -206,11 +272,18 @@ class YAMLSpec:
                     self._raise_type_error(value_type, [key, item_key], suffix="value")
         return value
     
-    def get_spec(self, key: str):
+    def get_spec(self, key: str) -> 'YAMLSpec':
         """Get a nested YAML specification.
 
         Args:
             key: The key to get.
+
+        Returns:
+            The nested YAML specification.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a dictionary or keys are not strings.
         """
 
         value = self.get_dict(key, required=True, key_type=str)
@@ -221,6 +294,14 @@ class YAMLSpec:
 
         Args:
             key: The key to get.
+            allow_single: Whether to allow a single specification instead of a list.
+
+        Returns:
+            The list of nested YAML specifications.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a a valid specification or list of specifications.
         """
 
         value_type = [list, dict] if allow_single else list
@@ -244,6 +325,13 @@ class YAMLSpec:
             key: The key to get.
             default_value: The default value to return if the key is not found.
             required: Whether the key is required.
+        
+        Returns:
+            The Palette value.
+
+        Raises:
+            KeyError: If the key is required but not found.
+            TypeError: If the value is not a valid Palette specification.
         """
 
         value = self.get(key, required=required, default_value=default_value)

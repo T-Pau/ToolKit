@@ -53,12 +53,14 @@ class Charset:
             value: byte sequence representing character to add
         Returns:
             index of added character
+        Raises:
+            OverflowError: If no more characters are available.
         """
 
         if value in self.by_value:
             return self.by_value[value][0]
         else:
-            index = self.get_next_index()
+            index = self._get_next_index()
             self.add_with_index(value, index)
             return index
 
@@ -71,6 +73,9 @@ class Charset:
             offset: offset between first and second character indices
         Returns:
             index of first added character
+        Raises:
+            OverflowError: If no pair of characters is available.
+            RuntimeError: If enable_pairs is False.
         """
         
         if offset is None:
@@ -85,7 +90,7 @@ class Charset:
                 if not index + offset in self.by_index:
                     self.add_with_index(value2, index + offset)
                     return index
-        index = self.get_next_index_pair(offset)
+        index = self._get_next_index_pair(offset)
         self.add_with_index(value1, index)
         self.add_with_index(value2, index + offset)
         return index
@@ -96,6 +101,9 @@ class Charset:
         Arguments:
             value: byte sequence representing character to add
             index: index at which to add character
+
+        Raises:
+            RuntimeError: If character at given index is already set
         """
 
         if index in self.by_index:
@@ -106,19 +114,37 @@ class Charset:
                 self.by_value[value] = []
             self.by_value[value].append(index)
 
-    def get_next_index(self) -> int:
+    def _get_next_index(self) -> int:
+        """Get next free character index.
+        
+        Returns:
+            next free character index
+        Raises:
+            OverflowError: If no free character index is available.
+        """
+
         while self.next_index in self.by_index:
             if self.next_index >= self.size - 1:
-                raise RuntimeError("out of characters")
+                raise OverflowError("out of characters")
             self.next_index += 1
         return self.next_index
 
-    def get_next_index_pair(self, offset: int) -> int:
+    def _get_next_index_pair(self, offset: int) -> int:
+        """Get next free character index pair.
+
+        Arguments:
+            offset: offset between first and second character indices
+        
+        Returns:
+            next free character index pair
+        Raises:
+            OverflowError: If no free character index pair is available.
+        """
         if self.next_index < self.size - offset:
             for index in range(self.next_index, self.size - offset):
                 if index not in self.by_index and index + offset not in self.by_index:
                     return index
-        raise RuntimeError("out of characters")
+        raise OverflowError("out of characters")
 
     def get_value(self, index: int) -> bytes:
         """Get character at given index.
@@ -143,7 +169,7 @@ class Charset:
         """Number of used characters."""
         return len(self.by_index)
 
-    def get_bytes(self, full: bool = False):
+    def get_bytes(self, full: bool = False) -> bytes:
         """Get character set as bytes.
 
         Arguments:

@@ -35,7 +35,12 @@ from typing import TypeAlias
 from Palette import Palette
 
 PixelSize = namedtuple("PixelSize", "x y")
+"""Size of logical pixels.
 
+Attributes:
+    x: Width of logical pixels.
+    y: Height of logical pixels.
+"""
 
 class PaletteImage:
     """Convert image to palette indices."""
@@ -81,7 +86,14 @@ class PaletteImage:
 
         Returns:
             Palette index of logical pixel at (x, y).
+
+        Raises:
+            ValueError: If (x, y) is outside image.
+            RuntimeError: If pixel color is not in palette or logical pixel is non-uniform.
         """
+
+        if x < 0 or x >= self.width or y < 0 or y >= self.height:
+            raise ValueError(f"invalid coordinates ({x}, {y})")
         
         color = None
         for sub_y in range(self.pixel_size.y):
@@ -114,7 +126,7 @@ class Window:
             height: Height of window.
 
         Raises:
-            RuntimeError: If window is larger than image.
+            ValueError: If window is larger than image.
 
         """
         if isinstance(image, Window):
@@ -129,7 +141,7 @@ class Window:
         self.height = height
 
         if self.x_offset < 0 or self.x_offset + self.width > self.image.width or self.y_offset < 0 or self.y_offset + self.height > self.image.height:
-            raise RuntimeError("window larger than image")
+            raise ValueError("window larger than image")
 
     def get(self, x: int, y: int) -> int | None:
         """Get palette index of logical pixel at (x, y) in window.
@@ -140,10 +152,15 @@ class Window:
 
         Returns:
             Palette index of logical pixel at (x, y) in window.
+        
+        Raises:
+            ValueError: If (x, y) is outside window.
+            RuntimeError: If pixel color is not in palette or logical pixel is non-uniform.
         """
         
         if x < 0 or x >= self.width or y < 0 or y >= self.height:
-            raise RuntimeError(f"invalid coordinates ({x}, {y})")
+            raise ValueError(f"invalid coordinates ({x}, {y})")
         return self.image.get(self.x_offset + x, self.y_offset + y)
 
 LogicalImage: TypeAlias = PaletteImage | Window
+"""A logical image, either a PaletteImage or a Window into one."""
