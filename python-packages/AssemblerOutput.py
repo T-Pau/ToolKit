@@ -46,6 +46,7 @@ class AssemblerOutput:
         self.last_line_empty = True
         self.partial_line = False
         self.in_object = False
+        self.had_header = False
 
     def begin_object(self, name: str, section: str | None = None, visibility: str | None = None, alignment: int | None = None) -> None:
         """Begin a new object.
@@ -240,16 +241,20 @@ class AssemblerOutput:
             RuntimeError: If not inside an object.
         """
 
-        self._check_in_object()
+        self._check_in_object("can't end object outside an object")
         self.in_object = False
         self._print_line("}")
 
-    def header(self, input_file: str | None) -> None:
+    def header(self, input_file: str | None = None) -> None:
         """Add standard file header comment.
 
         Args:
             input_file: The input file name, if any.
         """
+
+        if self.had_header:
+            raise RuntimeError("duplicate header")
+        self.had_header = True
 
         comment = f"This file is automatically created by {sys.argv[0]}"
         if input_file is not None:
@@ -270,7 +275,7 @@ class AssemblerOutput:
             RuntimeError: If not inside an object.
         """
 
-        self._check_in_object()
+        self._check_in_object("can't add label outside an object")
         visibility_string = ""
         if visibility is not None:
             visibility_string = f".{visibility} "
@@ -393,6 +398,7 @@ class AssemblerOutput:
             line: The line to print.
         """
 
+        self._ensure_header()
         self._end_line()
         print(line, file=self.file)
         self.last_line_empty = line == ""
@@ -404,6 +410,7 @@ class AssemblerOutput:
             text: The text to print.
         """
 
+        self._ensure_header()
         print(text, end="", file=self.file)
         if not self.partial_line:
             self.last_line_empty = text == ""
@@ -418,7 +425,13 @@ class AssemblerOutput:
             print("", file=self.file)
             self.partial_line = False
 
-    def _check_in_object(self) -> None:
+    def _ensure_header(self) -> None:
+        """Write file header if it has been written."""
+
+        if not self.had_header:
+            self.header()
+
+    def _check_in_object(self, message: str | None = None) -> None:
         """Check that we are inside an object.
 
         Raises:
@@ -426,9 +439,9 @@ class AssemblerOutput:
         """
 
         if not self.in_object:
-            raise RuntimeError("can't add data outside an object")
+            raise RuntimeError(message or "can't add data outside an object")
     
-    def _check_not_in_object(self) -> None:
+    def _check_not_in_object(self, message: str | None = None) -> None:
         """Check that we are not inside an object.
 
         Raises:
@@ -436,4 +449,4 @@ class AssemblerOutput:
         """
 
         if self.in_object:
-            raise RuntimeError("nested objects are not allowed")
+            raise RuntimeError(message or "nested objects are not allowed")
