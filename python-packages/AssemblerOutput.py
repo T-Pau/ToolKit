@@ -38,6 +38,9 @@ class AssemblerOutput:
         
         Args:
             file: The output file handle.
+        
+        Raises:
+            RuntimeError: If an object is nested inside another object.
         """
 
         self.file = file
@@ -45,6 +48,7 @@ class AssemblerOutput:
         self.current_visibility = "private"
         self.last_line_empty = True
         self.partial_line = False
+        self.in_object = False
 
     def begin_object(self, name: str, section: str | None = None, visibility: str | None = None, alignment: int | None = None) -> None:
         """Begin a new object.
@@ -56,6 +60,8 @@ class AssemblerOutput:
             alignment: The alignment of the object.
         """
 
+        self._check_not_in_object()
+
         if section is not None:
             self.section(section)
         self.empty_line()
@@ -66,6 +72,7 @@ class AssemblerOutput:
         if alignment is not None:
             alignment_string = f" .align ${hex(alignment)[2:]}"
         self._print_line(f"{visibility_string}{name}{alignment_string} {{")
+        self.in_object = True
 
     def byte(self, value: Any) -> None:
         """Add a byte value as `.data` to current object.
@@ -73,6 +80,8 @@ class AssemblerOutput:
         Args:
             value: The byte value.
         """
+
+        self._check_in_object()
         self._print_line(f"    .data {value}")
 
     def bytes(self, bytes_array: bytes) -> None:
@@ -80,8 +89,11 @@ class AssemblerOutput:
 
         Args:
             bytes_array: The byte array.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
+        self._check_in_object()
         i = 0
         for byte in bytes_array:
             if i == 0:
@@ -105,6 +117,8 @@ class AssemblerOutput:
             section: The section to place the object in. If `None`, place in current section.
             visibility: The visibility of the object.
             alignment: The alignment of the object.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
         self.begin_object(name, section=section, alignment=alignment, visibility=visibility)
@@ -162,6 +176,8 @@ class AssemblerOutput:
             section: The section to place the object in.
             visibility: The visibility of the object.
             alignment: The alignment of the object.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
         self.begin_object(name, section=section, alignment=alignment, visibility=visibility)
@@ -175,8 +191,12 @@ class AssemblerOutput:
             value: The data value or list of values.
             encoding: The encoding to use for strings.
             line_length: The number of values per line.
+        
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
+        self._check_in_object()
         if type(value) != list:
             value = [value]
 
@@ -204,8 +224,14 @@ class AssemblerOutput:
             self._print_line("")
 
     def end_object(self) -> None:
-        """End the current object."""
+        """End the current object.
+        
+        Raises:
+            RuntimeError: If not inside an object.
+        """
 
+        self._check_in_object()
+        self.in_object = False
         self._print_line("}")
 
     def header(self, input_file: str | None) -> None:
@@ -229,8 +255,11 @@ class AssemblerOutput:
         Args:
             name: The name of the label.
             visibility: The visibility of the label.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
+        self._check_in_object()
         visibility_string = ""
         if visibility is not None:
             visibility_string = f".{visibility} "
@@ -245,8 +274,10 @@ class AssemblerOutput:
             include_count: Whether to create an object with the count of parts.
             include_index: Whether to create an index object referencing each part.
             names: Optional list of name suffixes for the parts. If not provided, parts are named by their index.
+        Raises:
+            RuntimeError: If inside an object.
         """
-
+        self._check_not_in_object()
         if include_index:
             if include_count:
                 self.begin_object(f"{name}_count")
@@ -269,6 +300,7 @@ class AssemblerOutput:
     def pre_end(self) -> None:
         """Add a preprocessor end directive."""
         self._print_line(f".pre_end")
+
     def pre_if(self, predicate: str) -> None:
         """Add a preprocessor if directive.
 
@@ -284,8 +316,11 @@ class AssemblerOutput:
             value: The string value.
             encoding: The encoding to use for the string.
             nul_terminate: Whether to add a NUL terminator.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
+        self._check_in_object()
         self._print(f"    .data \"{value}\"")
         if encoding is not None:
             self._print(f":{encoding}")
@@ -298,8 +333,11 @@ class AssemblerOutput:
 
         Args:
             section: The section name.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
+        self._check_not_in_object()
         if self.current_section != section:
             self.empty_line()
             self._print_line(f".section {section}")
@@ -310,8 +348,11 @@ class AssemblerOutput:
 
         Args:
             visibility: The visibility level.
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
+        self._check_not_in_object()
         if self.current_visibility != visibility:
             self.empty_line()
             self._print_line(f".visibility {visibility}")
@@ -322,7 +363,10 @@ class AssemblerOutput:
 
         Args:
             value: The word value.
+        Raises:
+            RuntimeError: If not inside an object.
         """
+        self._check_in_object()
 
         self._print_line(f"    .data {value}:2")
 
@@ -357,3 +401,23 @@ class AssemblerOutput:
         if self.partial_line:
             print("", file=self.file)
             self.partial_line = False
+
+    def _check_in_object(self) -> None:
+        """Check that we are inside an object.
+
+        Raises:
+            RuntimeError: If we are not inside an object.
+        """
+
+        if not self.in_object:
+            raise RuntimeError("can't add data outside an object")
+    
+    def _check_not_in_object(self) -> None:
+        """Check that we are not inside an object.
+
+        Raises:
+            RuntimeError: If we are inside an object.
+        """
+
+        if self.in_object:
+            raise RuntimeError("nested objects are not allowed")
