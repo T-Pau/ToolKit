@@ -38,9 +38,6 @@ class AssemblerOutput:
         
         Args:
             file: The output file handle.
-        
-        Raises:
-            RuntimeError: If an object is nested inside another object.
         """
 
         self.file = file
@@ -58,12 +55,19 @@ class AssemblerOutput:
             section: The section to place the object in. If `None`, place in current section.
             visibility: The visibility of the object.
             alignment: The alignment of the object.
+
+        Raises:
+            RuntimeError: If an object is outside of a section or nested inside another object.
         """
 
         self._check_not_in_object()
 
         if section is not None:
             self.section(section)
+
+        if self.current_section is None:
+            raise RuntimeError("object outside of section not allowed")
+
         self.empty_line()
         alignment_string = ""
         visibility_string = ""
@@ -79,6 +83,9 @@ class AssemblerOutput:
         
         Args:
             value: The byte value.
+
+        Raises:
+            RuntimeError: If not inside an object.
         """
 
         self._check_in_object()
@@ -89,6 +96,7 @@ class AssemblerOutput:
 
         Args:
             bytes_array: The byte array.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -117,6 +125,7 @@ class AssemblerOutput:
             section: The section to place the object in. If `None`, place in current section.
             visibility: The visibility of the object.
             alignment: The alignment of the object.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -176,6 +185,7 @@ class AssemblerOutput:
             section: The section to place the object in.
             visibility: The visibility of the object.
             alignment: The alignment of the object.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -255,6 +265,7 @@ class AssemblerOutput:
         Args:
             name: The name of the label.
             visibility: The visibility of the label.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -274,6 +285,7 @@ class AssemblerOutput:
             include_count: Whether to create an object with the count of parts.
             include_index: Whether to create an index object referencing each part.
             names: Optional list of name suffixes for the parts. If not provided, parts are named by their index.
+
         Raises:
             RuntimeError: If inside an object.
         """
@@ -316,6 +328,7 @@ class AssemblerOutput:
             value: The string value.
             encoding: The encoding to use for the string.
             nul_terminate: Whether to add a NUL terminator.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -333,6 +346,7 @@ class AssemblerOutput:
 
         Args:
             section: The section name.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -348,6 +362,7 @@ class AssemblerOutput:
 
         Args:
             visibility: The visibility level.
+
         Raises:
             RuntimeError: If not inside an object.
         """
@@ -363,6 +378,7 @@ class AssemblerOutput:
 
         Args:
             value: The word value.
+
         Raises:
             RuntimeError: If not inside an object.
         """
