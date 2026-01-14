@@ -75,7 +75,7 @@ class ConvertImage(Script.Script):
     def execute_sub(self):
         binary = ConvertImage.converters[self.args.format](self)
         if self.args.runlength:
-            encoder = RunlengthEncoder.RunlengthEncoder()
+            encoder = RunlengthEncoder.BinaryRunlengthEncoder()
             encoder.add_bytes(binary)
             binary = encoder.end()
         self.assembler.bytes_object(self.symbol_name(), binary)

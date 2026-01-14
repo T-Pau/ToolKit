@@ -51,16 +51,14 @@ class FileReader:
         def message_prefix(self):
             return f"{self.filename}:{self.line_number}: "
         
-    def __init__(self, script: str, filename: str, preprocess: bool = False, defines: dict = {}):
+    def __init__(self, filename: str, preprocess: bool = False, defines: dict = {}):
         """Initialize FileReader.
         
         Arguments:
-            script: script name for error messages
             filename: file to read
             preprocess: whether to run preprocessor
             defines: dictionary with preprocessor defines
         """
-        self.script = script
         self.preprocess = preprocess
         self.defines = defines
         self.sources = [FileReader.Source(filename)]

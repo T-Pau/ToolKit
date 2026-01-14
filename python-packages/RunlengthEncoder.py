@@ -27,7 +27,7 @@
 """
 
 import enum
-from typing import Any
+from typing import Any, Iterable
 
 class Trim(enum.Enum):
     none = "none"
@@ -36,144 +36,192 @@ class Trim(enum.Enum):
     both = "both"
 
 
-class RunlengthEncoder:
+class _RunlengthEncoder:
+    """Base class for runlength encoders with skip support."""
     class State(enum.Enum):
         empty = enum.auto()
         char = enum.auto()
         skip = enum.auto()
 
-    def __init__(self, trim: Trim = Trim.trailing, binary: bool = True) -> None:
-        self.binary = binary
-        self.compressed = self.empty_string()
-        self.literal = self.empty_string()
+    def __init__(self, trim: Trim = Trim.trailing) -> None:
+        """Initialize runlength encoder.
+        
+        Arguments:
+            trim: Specifies whether leading and/or trailing skips should be trimmed.
+        """
+
         self.code_runlength = 0x80
         self.code_skip = 0xc0
-        self.state = RunlengthEncoder.State.empty
-        self.length = 0
-        self.last_byte = None
         self.trim = trim
+        self.state = _RunlengthEncoder.State.empty
+        self.last_element = None
+        self.state = _RunlengthEncoder.State.empty
+        self.length = 0
+        self.literal = []
 
-    def add_bytes(self, data: bytes) -> None:
-        for byte in data:
-            self.add(byte)
+    def _reset(self) -> None:
+        self.last_element = None
+        self.state = _RunlengthEncoder.State.empty
+        self.length = 0
+        self.literal = []
 
-    def add(self, byte: int) -> None:
-        self.set_state(RunlengthEncoder.State.char)
-        if byte != self.last_byte:
-            self.end_run()
-            self.last_byte = byte
+    def skip(self, amount: int) -> None:
+        """Skip the specified number of elements.
+        
+        Arguments:
+            amount: Number of elements to skip.
+        """
+
+        if amount == 0:
+            return
+        if self.state == _RunlengthEncoder.State.empty and (self.trim == Trim.leading or self.trim == Trim.both):
+            return
+        self._set_state(_RunlengthEncoder.State.skip)
+        self.length += amount
+
+    def _add_element(self, element: Any) -> None:
+        self._set_state(_RunlengthEncoder.State.char)
+        if element != self.last_element:
+            if self.last_element is not None:
+                self._end_run()
+            self.last_element = element
             self.length = 1
         else:
             self.length += 1
 
-    def skip(self, amount: int) -> None:
-        if amount == 0:
-            return
-        if self.state == RunlengthEncoder.State.empty and (self.trim == Trim.leading or self.trim == Trim.both):
-            return
-        self.set_state(RunlengthEncoder.State.skip)
-        self.length += amount
+    def _add_multiple_elements(self, elements: Iterable) -> None:
+        for element in elements:
+            self._add_element(element)
 
-    def end(self) -> list | bytes:
-        if self.state == RunlengthEncoder.State.char or (self.state == RunlengthEncoder.State.skip and self.trim != Trim.trailing and self.trim != Trim.both):
-            self.set_state(RunlengthEncoder.State.empty)
-        self.encode_end()
-        result = self.compressed
-        self.compressed = self.empty_string()
-        return result
-
-    def set_state(self, state: State) -> None:
+    def _end(self):
+        if self.state == _RunlengthEncoder.State.char or (self.state == _RunlengthEncoder.State.skip and self.trim != Trim.trailing and self.trim != Trim.both):
+            self._set_state(_RunlengthEncoder.State.empty)
+        self._encode_end()
+    
+    def _set_state(self, state: State) -> None:
         if self.state == state:
             return
-        if self.state == RunlengthEncoder.State.char:
-            self.end_char()
-        elif self.state == RunlengthEncoder.State.skip:
-            self.end_skip()
+        if self.state == _RunlengthEncoder.State.char:
+            self._end_run()
+        elif self.state == _RunlengthEncoder.State.skip:
+            self._end_skip()
         self.state = state
-        self.last_byte = None
+        self.last_element = None
         self.length = 0
 
-    def end_run(self) -> None:
-        if self.state != RunlengthEncoder.State.char:
+    def _end_run(self) -> None:
+        if self.state != _RunlengthEncoder.State.char:
             return
         if self.length > 2:
-            self.encode_literal(self.literal)
-            self.literal = self.empty_string()
-            self.encode_run(self.length, self.last_byte)
+            self._encode_literal()
+            self._encode_run(self.length, self.last_element)
         else:
-            for i in range(self.length):
-                self.add_literal(self.last_byte)
-        self.empty()
+            self.literal.extend([self.last_element] * self.length)
+            self._encode_literal()
+        self._empty()
 
-    def end_char(self) -> None:
-        if self.state != RunlengthEncoder.State.char:
+    def _end_char(self) -> None:
+        if self.state != _RunlengthEncoder.State.char:
             return
-        self.end_run()
-        self.encode_literal(self.literal)
-        self.literal = b""
-        self.empty()
+        self._end_run()
+        self._encode_literal()
+        self._empty()
 
-    def end_skip(self) -> None:
-        if self.state != RunlengthEncoder.State.skip:
+    def _end_skip(self) -> None:
+        if self.state != _RunlengthEncoder.State.skip:
             return
-        self.encode_skip(self.length)
-        self.empty()
+        self._encode_skip(self.length)
+        self._empty()
 
-    def empty(self) -> None:
+    def _empty(self) -> None:
         self.length = 0
-        self.last_byte = None
+        self.last_element = None
 
-    def encode_literal(self, data: list | bytes) -> None:
+    def _encode_literal(self) -> None:
         offset = 0
-        while offset + 127 < len(data):
-            self.output(127)
-            self.output(data[offset:offset+127])
+        while offset + 127 < len(self.literal):
+            self._output(127)
+            self._output(self.literal[offset:offset+127])
             offset += 127
-        if offset < len(data):
-            self.output(len(data) - offset)
-            self.output(data[offset:])
+        if offset < len(self.literal):
+            self._output(len(self.literal) - offset)
+            self._output(self.literal[offset:])
+        self.literal = []
 
-    def encode_run(self, length: int, byte: Any) -> None:
-        while self.length > 63:
-            self.output(self.code_runlength + 63)
-            self.output(byte)
-            self.length -= 63
-        if self.length > 0:
-            self.output(self.code_runlength + self.length)
-            self.output(byte)
+    def _encode_run(self, length: int, element: Any) -> None:
+        while length > 0:
+            chunk = min(length, 63)
+            self._output(self.code_runlength + chunk)
+            self._output([element])
+            length -= chunk
 
-    def encode_skip(self, length: int) -> None:
-        while length > 63:
-            self.output(self.code_skip + 63)
-            length -= 63
-        if length > 0:
-            self.output(self.code_skip + length)
+    def _encode_skip(self, length: int) -> None:
+        while length > 0:
+            chunk = min(length, 63)
+            self._output(self.code_skip + chunk)
+            length -= chunk
 
-    def encode_end(self) -> None:
-        self.output(self.code_skip)
+    def _encode_end(self) -> None:
+        self._output(self.code_skip)
 
-    def output(self, byte: Any) -> None:
-        if self.binary:
-            if type(byte) is bytes:
-                self.compressed += byte
-            else:
-                self.compressed += byte.to_bytes(1, byteorder="little")
+    def _output(self, data: int|list) -> None:
+        raise NotImplementedError("Subclasses must implement _output method.")
+
+
+class BinaryRunlengthEncoder(_RunlengthEncoder):
+    def __init__(self, trim: Trim = Trim.trailing) -> None:
+        super().__init__(trim=trim)
+        self.compressed = b""
+
+    def _reset(self) -> None:
+        self.compressed = b""
+
+    def add(self, byte: int) -> None:
+        super()._add_element(byte)
+
+    def add_bytes(self, data: bytes) -> None:
+        super()._add_multiple_elements(data)
+
+    def end(self) -> bytes:
+        super()._end()
+        result = self.compressed
+        self._reset()
+        return result
+
+    def _output(self, data: int|list) -> None:
+        if type(data) is list:
+            self.compressed += bytes(data)
+        elif type(data) is int:
+            self.compressed += data.to_bytes(1, byteorder="little")
         else:
-            if type(byte) is list:
-                self.compressed += byte
-            else:
-                if type(byte) is int:
-                    byte = "$%0.2x" % byte
-                self.compressed.append(byte)
+            raise TypeError("byte must be int or list")
 
-    def empty_string(self) -> list | bytes:
-        if self.binary:
-            return b""
+
+class SymbolRunlengthEncoder(_RunlengthEncoder):
+    def __init__(self, trim: Trim = Trim.trailing) -> None:
+        super().__init__(trim=trim)
+        self.compressed = []
+
+    def _reset(self) -> None:
+        super()._reset()
+        self.compressed = []
+
+    def add(self, symbol: Any) -> None:
+        super()._add_element(symbol)
+
+    def add_list(self, symbols: Iterable) -> None:
+        super()._add_multiple_elements(symbols)
+
+    def end(self) -> list:
+        super()._end()
+        result = self.compressed
+        self._reset()
+        return result
+
+    def _output(self, data: int|list) -> None:
+        if type(data) is list:
+            self.compressed += data
+        elif type(data) is int:
+            self.compressed.append("$%0.2x" % data)
         else:
-            return []
-    
-    def add_literal(self, byte):
-        if self.binary:
-            self.literal += byte.to_bytes(1, byteorder="little")
-        else:
-            self.literal.append(byte)
+            raise TypeError("byte must be int or list")

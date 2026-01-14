@@ -210,7 +210,7 @@ class ConvertCharacters(Script.Script):
 
             charset_bytes = charset.get_bytes()
             if charset_spec.rl_encode:
-                runlength = RunlengthEncoder.RunlengthEncoder()
+                runlength = RunlengthEncoder.BinaryRunlengthEncoder()
                 runlength.add_bytes(charset_bytes)
                 charset_bytes = runlength.end()
             self.assembler.bytes_object(charset_spec.name, charset_bytes, section=charset_spec.section, alignment=charset_spec.align)
@@ -305,7 +305,7 @@ class ConvertCharacters(Script.Script):
             for x in range(image_spec.slice_x):
                 if not prerun:
                     if image_spec.rl_encode:
-                        runlength = RunlengthEncoder.RunlengthEncoder(image_spec.trim)
+                        runlength = RunlengthEncoder.BinaryRunlengthEncoder(image_spec.trim)
                     else:
                         chars = b""
                 for yy in range(height):

@@ -57,7 +57,7 @@ class ConvertCharset(Script.Script):
         self.args.runlength = False
 
         if runlength_encode:
-            runlength = RunlengthEncoder.RunlengthEncoder()
+            runlength = RunlengthEncoder.BinaryRunlengthEncoder()
             for index in range(0, charset.count):
                 char = charset.get(index)
                 if char is None:
@@ -75,7 +75,7 @@ class ConvertCharset(Script.Script):
 
         if self.args.inverted:
             if runlength_encode:
-                runlength = RunlengthEncoder.RunlengthEncoder()
+                runlength = RunlengthEncoder.BinaryRunlengthEncoder()
                 for index in range(0, charset.count):
                     char = charset.get(index)
                     if char is None:

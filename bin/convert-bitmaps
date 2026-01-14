@@ -129,7 +129,7 @@ class ConvertBitmaps(Script.Script):
                     self.assembler.constant(name, data)
                 elif component_spec.object_type == ObjectType.SYMBOL:
                     if component_spec.runlength_encode:
-                        encoder = RunlengthEncoder.RunlengthEncoder()
+                        encoder = RunlengthEncoder.BinaryRunlengthEncoder()
                         encoder.add_bytes(data)
                         data = encoder.end()
                     self.assembler.bytes_object(name, data, section=component_spec.section, alignment=component_spec.alignment)

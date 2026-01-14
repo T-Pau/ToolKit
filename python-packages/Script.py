@@ -273,11 +273,14 @@ class Script:
 
         alignment = None
         if self.args.runlength:
-            runlength = RunlengthEncoder.RunlengthEncoder()
+            runlength = RunlengthEncoder.BinaryRunlengthEncoder()
             runlength.add_bytes(binary)
             binary = runlength.end()
         if self.args.alignment is not None:
             alignment = int(self.args.alignment)
+
+        if self.assembler is None:
+            raise RuntimeError("internal error: assembler not configured")
 
         self.assembler.bytes_object(self.symbol_name()+name_suffix, binary, section=self.args.section, alignment=alignment)
 
@@ -452,7 +455,10 @@ class Script:
                 defines = self.args.defines
             else:
                 defines = {}
-            self.file_reader = FileReader.FileReader(self, self.input_filename(), preprocess=preprocess, defines=defines)
+            filename = self.input_filename()
+            if filename is None:
+                raise RuntimeError("no input file specified")
+            self.file_reader = FileReader.FileReader(filename, preprocess=preprocess, defines=defines)
 
     def read_built_files(self) -> None:
         filename = self.find_file(self.args.built_files)

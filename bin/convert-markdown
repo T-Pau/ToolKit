@@ -46,6 +46,9 @@ class ConvertMarkdown(Script.Script):
     def input_filename(self):
         return self.args.markdown
 
+    def default_output_extension(self) -> str:
+        return "html"
+
     def execute_sub(self):
         filename = self.find_file(self.input_filename())
         with open(filename, "r") as file:

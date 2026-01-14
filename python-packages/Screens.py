@@ -173,7 +173,7 @@ class Screens:
         self.runlength_encode = True
 
         self.dependencies = dependencies
-        self.encoder = RunlengthEncoder.RunlengthEncoder()
+        self.encoder = RunlengthEncoder.BinaryRunlengthEncoder()
         self.in_preamble = True
         self.compressed_screens = []
         self.screen_names = []

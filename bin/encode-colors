@@ -96,18 +96,18 @@ class Object:
     def output_data(self, index, assembler, runlength):
         assembler.begin_object(self.name)
         if runlength:
-            encoder = RunlengthEncoder.RunlengthEncoder(binary=False)
+            encoder = RunlengthEncoder.SymbolRunlengthEncoder()
         data = []
         for y in range(self.height):
             for x in range(self.width):
                 data.append(self.colors[index][y][x])
             if runlength and self.line_skip > 0:
-                encoder.add_bytes(data)
+                encoder.add_list(data)
                 data = []
                 encoder.skip(self.line_skip)
 
         if runlength:
-            encoder.add_bytes(data)
+            encoder.add_list(data)
             data = encoder.end()
         assembler.data(data)
         assembler.end_object()

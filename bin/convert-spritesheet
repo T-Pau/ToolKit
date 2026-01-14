@@ -172,7 +172,7 @@ class ConvertSpriteSheet(Script.Script):
             for sprite_data in frame_sprites:
                 data += sprite_data
             if spec.runlength_encoding:
-                encoder = RunlengthEncoder.RunlengthEncoder()
+                encoder = RunlengthEncoder.BinaryRunlengthEncoder()
                 encoder.add_bytes(data)
                 data = encoder.end()
             self.assembler.bytes_object(f"{spec.name_prefix}_frame_{index}", data)
@@ -213,7 +213,7 @@ class ConvertSpriteSheet(Script.Script):
         self.assembler.end_object()
         sprite_data = sprite_sheet.get_bytes()
         if spec.runlength_encoding:
-            encoder = RunlengthEncoder.RunlengthEncoder()
+            encoder = RunlengthEncoder.BinaryRunlengthEncoder()
             encoder.add_bytes(sprite_sheet.get_bytes())
             sprite_data = encoder.end()
         self.assembler.bytes_object(f"{spec.name_prefix}_sprites", sprite_data)
