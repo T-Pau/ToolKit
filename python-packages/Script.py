@@ -122,9 +122,9 @@ class Script:
         self.arg_parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
         self.arg_parser.add_argument("-o", metavar="FILE", dest="output_filename", help="write output to FILE")
         self.output = AtomicOutput.AtomicOutput()
-        self.dependencies = None
-        self.assembler = None
-        self.file_reader = None
+        self._dependencies = None
+        self._assembler = None
+        self._file_reader = None
         self.dyndep_mode = False
         self.built_files = set()
 
@@ -171,7 +171,7 @@ class Script:
                 self.prepare()
 
                 self.output.set_filename(self.output_filename(), self.options.is_set(Option.binary_output))
-                self.dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
+                self._dependencies = Dependencies.Dependencies(self.args.depfile, self.output_filename())
                 if not self.output.run(lambda: self.execute()):
                     sys.exit(1)
                 if not self.options.is_set(Option.output_optional):
@@ -220,20 +220,35 @@ class Script:
 
         self.output.error(message)
 
-    def find_file(self, file: str, optional: bool = False) -> str | None:
+    def find_file(self, file: str) -> str:
         """Find a file, searching the directory of the input file and include directories.
 
         This method is meant to be called by subclasses.
         
         Args:
             file: Name of the file to find.
-            optional: If true, return None if the file is not found.
+
+        Returns:
+            The name of the found file.
+
+        Raises:
+            RuntimeError: If the file is not found.
+        """
+        found_file = self.find_optional_file(file)
+        if found_file is None:
+            raise RuntimeError(f"file '{file}' not found")
+        return found_file
+
+    def find_optional_file(self, file: str) -> str | None:
+        """Find an optional file, searching the directory of the input file and include directories.
+
+        This method is meant to be called by subclasses.
+        
+        Args:
+            file: Name of the file to find.
 
         Returns:
             The name of the found file, or None if optional and the file is not found.
-
-        Raises:
-            RuntimeError: If a non-optional file is not found.
         """
 
         search_include_directories = not (os.path.isabs(file) or file.startswith("./")) and self.options.is_set(Option.include_directories)
@@ -254,10 +269,7 @@ class Script:
                     found = True
                     break
         if not found:
-            if optional:
-                return None
-            else:
-                raise RuntimeError(f"can't find file '{file}'")
+            return None
         self.add_dependency(file)
         return file
 
@@ -278,9 +290,6 @@ class Script:
             binary = runlength.end()
         if self.args.alignment is not None:
             alignment = int(self.args.alignment)
-
-        if self.assembler is None:
-            raise RuntimeError("internal error: assembler not configured")
 
         self.assembler.bytes_object(self.symbol_name()+name_suffix, binary, section=self.args.section, alignment=alignment)
 
@@ -360,7 +369,7 @@ class Script:
 
         return []
 
-    # Optional Subclass Metods
+    # Optional Subclass Methods
 
     # Get default filename extension for output files. Used by default implementation of `default_output_filename()`.
     def default_output_extension(self) -> str:
@@ -420,17 +429,53 @@ class Script:
         name, extension = os.path.splitext(filename)
         return os.path.basename(name) + "." + self.default_output_extension()
 
+    @property
+    def assembler(self) -> AssemblerOutput.AssemblerOutput:
+        """Get assembler output object.
+
+        Returns:
+            The assembler output object.
+        """
+
+        if self._assembler is None:
+            raise RuntimeError("assembler not configured")
+        return self._assembler
+
+    @property
+    def file_reader(self) -> FileReader.FileReader:
+        """Get file reader object.
+
+        Returns:
+            The file reader object.
+        """
+
+        if self._file_reader is None:
+            raise RuntimeError("file reader not configured")
+        return self._file_reader
+
+    @property
+    def dependencies(self) -> Dependencies.Dependencies:
+        """Get dependencies object.
+
+        Returns:
+            The dependencies object.
+        """
+
+        if self._dependencies is None:
+            raise RuntimeError("dependencies not configured")
+        return self._dependencies
+    
     # Internal Methods
 
     # Set up and call actual processing.
     def execute(self) -> None:
         if self.options.is_set(Option.assembler_output):
-            self.assembler = AssemblerOutput.AssemblerOutput(self.output_file())
+            self._assembler = AssemblerOutput.AssemblerOutput(self.output_file())
             self.assembler.header(self.input_filename())
             self.assembler.section(self.args.section)
         self.common_preparations()
         self.execute_sub()
-        if self.file_reader is not None and not self.file_reader.ok:            
+        if self._file_reader is not None and not self._file_reader.ok:            
             self.output.fail()
         if self.dependencies is not None:
             self.dependencies.write()
@@ -440,7 +485,7 @@ class Script:
     def create_dyndep(self) -> None:
         self.common_preparations()
         dependencies = self.get_dynamic_dependencies()
-        if self.file_reader is not None and not self.file_reader.ok:            
+        if self._file_reader is not None and not self._file_reader.ok:            
             self.output.fail()
         # TODO: quote spaces &c
         quoted_dependencies = [re.sub(r'([ :\n$])', r'$\1', s) for s in dependencies]
@@ -458,7 +503,7 @@ class Script:
             filename = self.input_filename()
             if filename is None:
                 raise RuntimeError("no input file specified")
-            self.file_reader = FileReader.FileReader(filename, preprocess=preprocess, defines=defines)
+            self._file_reader = FileReader.FileReader(filename, preprocess=preprocess, defines=defines)
 
     def read_built_files(self) -> None:
         filename = self.find_file(self.args.built_files)
