@@ -135,9 +135,6 @@ class ConvertSpriteSheet(Script.Script):
         for frame in frames:
             frame.pad_to_layers(layers)
 
-        if self.assembler is None:
-            raise RuntimeError("internal error: assembler not initialized")
-
         self.assembler.empty_line()
         self.assembler.constant(f"{spec.name_prefix}_LAYERS".upper(), layers)
         self.assembler.constant(f"{spec.name_prefix}_FRAMES".upper(), len(frames))
@@ -157,9 +154,6 @@ class ConvertSpriteSheet(Script.Script):
                 sprite_data = frame.get_sprite(layer)
                 frame_sprites.append(sprite_data)
             sprites.append(frame_sprites)
-
-        if self.assembler is None:
-            raise RuntimeError("internal error: assembler not initialized")
 
         for operand, suffix in [("<", "low"), (">", "high")]:
             self.assembler.begin_object(f"{spec.name_prefix}_sprites_{suffix}")
@@ -199,8 +193,6 @@ class ConvertSpriteSheet(Script.Script):
                 frame_pointers.append(sprite_index)
             pointers.append(frame_pointers)
 
-        if self.assembler is None:
-            raise RuntimeError("internal error: assembler not initialized")
  
         self.assembler.constant(f"{spec.name_prefix}_SPRITE_COUNT".upper(), sprite_sheet.max_index + 1)
         if isinstance(spec.pointer_offset, int):
