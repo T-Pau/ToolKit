@@ -28,11 +28,19 @@ import enum
 from typing import Any, Iterable
 
 class Trim(enum.Enum):
-    none = "none"
-    leading = "leading"
-    trailing = "trailing"
-    both = "both"
+    """Specifies whether leading and/or trailing skips should be omitted."""
 
+    none = "none"
+    """Do not omit skips."""
+
+    leading = "leading"
+    """Omit leading skips."""
+
+    trailing = "trailing"
+    """Omit trailing skips."""
+
+    both = "both"
+    """Omit both leading and trailing skips."""
 
 class _RunlengthEncoder:
     """Base class for runlength encoders with skip support."""
@@ -45,7 +53,7 @@ class _RunlengthEncoder:
         """Initialize runlength encoder.
         
         Arguments:
-            trim: Specifies whether leading and/or trailing skips should be trimmed.
+            trim: Specifies whether leading and/or trailing skips should be omitted.
         """
 
         self.code_runlength = 0x80
