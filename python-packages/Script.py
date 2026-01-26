@@ -39,6 +39,7 @@ import AssemblerOutput
 import AtomicOutput
 import Dependencies
 import FileReader
+import MessageHandler
 import RunlengthEncoder
 
 class Option(enum.Enum):
@@ -105,7 +106,7 @@ class Options:
     def is_set(self, option: Option) -> bool:
         return option in self.options
 
-class Script:
+class Script(MessageHandler.MessageHandler):
     """Base class for scripts with standard interface."""
 
     # Public API
@@ -116,7 +117,8 @@ class Script:
             description: Description of the script for the help message.
             options: Optional features to enable.
         """
-
+        
+        super().__init__()
         self.options = Options(options)
         self.arg_parser = argparse.ArgumentParser(description=description, allow_abbrev=False)
         self.arg_parser.add_argument("-M", metavar="FILE", dest="depfile", help="output dependency information to FILE")
@@ -154,6 +156,8 @@ class Script:
 
         if self.options.is_set(Option.section):
             self.arg_parser.add_argument("-s", "--section", metavar="SECTION", dest="section", default="data", help="put in SECTION")
+
+        MessageHandler.push_message_handler(self)
 
     def run(self) -> None:
         """Run the script."""
@@ -199,26 +203,9 @@ class Script:
 
         if self.dependencies is not None:
             self.dependencies.add(file)
-    
-    def warning(self, message: str) -> None:
-        """Print warning.
-        
-        Args:
-            message: Warning message.
-        """
-        
-        self.output.warning(message)
 
-    def error(self, message: str) -> None:
-        """Report an error and mark script as failed.
-        
-        This method is meant to be called by subclasses.
-        
-        Args:
-            message: The error message.
-        """
-
-        self.output.error(message)
+    def message(self, message: str, prefix: str | None = None, file: str | None = None, position: Any = None, position_end: Any = None, fail: bool = False) -> None:
+        self.output.message(message, prefix=prefix, file=file, position=position, position_end=position_end, fail=fail)
 
     def find_file(self, file: str) -> str:
         """Find a file, searching the directory of the input file and include directories.

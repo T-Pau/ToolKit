@@ -32,6 +32,7 @@ from PIL import Image
 from collections import namedtuple
 from typing import TypeAlias
 
+from FilePositionException import FilePositionException
 from Palette import Palette
 
 PixelSize = namedtuple("PixelSize", "x y")
@@ -49,8 +50,8 @@ class PaletteImage:
         """Initialize PaletteImage.
 
         Args:
-            filename: Name of file to load image from.
             palette: Palette to use.
+            filename: Name of file to load image from.
             image: Image to use.
             pixel_size: Size of logical pixels.
         """
@@ -60,9 +61,9 @@ class PaletteImage:
         self.pixel_size = pixel_size
 
         if filename is not None:
-            self.image = Image.open(filename)
             if image is not None:
                 raise RuntimeError(f"both filename and image given for PaletteImage")
+            self.image = Image.open(filename)
         elif image is not None:
             self.image = image
         else:
@@ -70,10 +71,8 @@ class PaletteImage:
         
         if pixel_size.x < 1 or pixel_size.y < 1:
             raise RuntimeError(f"invalid pixel size {pixel_size} at {self.filename}")
-        if self.image.width % self.pixel_size.x != 0:
-            raise RuntimeError(f"image width {self.image.width} is not multiple of pixel size {self.pixel_size.x} at {self.filename}")
-        if self.image.width % self.pixel_size.x != 0:
-            raise RuntimeError(f"image height {self.image.height} is not multiple of pixel size {self.pixel_size.y} at {self.filename}")
+        if self.image.width % self.pixel_size.x != 0 or self.image.height % self.pixel_size.y != 0:
+            raise FilePositionException(f"image dimensions ({self.image.width}x{self.image.height}) are not multiple of pixel size {self.pixel_size}", file=self.filename)
         self.width = self.image.width // self.pixel_size.x
         self.height = self.image.height // self.pixel_size.y
 
@@ -89,7 +88,7 @@ class PaletteImage:
 
         Raises:
             ValueError: If (x, y) is outside image.
-            RuntimeError: If pixel color is not in palette or logical pixel is non-uniform.
+            FilePositionException: If pixel color is not in palette or logical pixel is non-uniform.
         """
 
         if x < 0 or x >= self.width or y < 0 or y >= self.height:
@@ -104,12 +103,12 @@ class PaletteImage:
                 try:
                     sub_color = self.palette[self.image.getpixel((image_x, image_y))]
                 except Exception as ex:
-                    raise RuntimeError(f"{ex} at {self.filename}:({image_x},{image_y})")
+                    raise FilePositionException(f"{ex}", file=self.filename, position=(image_x, image_y)) from ex
                 
                 if color is None:
                     color = sub_color
                 elif color != sub_color:
-                    raise RuntimeError(f"non-uniform logical pixel at {self.filename}:({image_x},{image_y})")
+                    raise FilePositionException(f"non-uniform logical pixel", file=self.filename, position=(x * self.pixel_size.x, y * self.pixel_size.y), position_end=((x + 1) * self.pixel_size.x - 1, (y + 1) * self.pixel_size.y - 1))
         return color
 
 class Window:
@@ -155,7 +154,7 @@ class Window:
         
         Raises:
             ValueError: If (x, y) is outside window.
-            RuntimeError: If pixel color is not in palette or logical pixel is non-uniform.
+            FilePositionException: If pixel color is not in palette or logical pixel is non-uniform.
         """
         
         if x < 0 or x >= self.width or y < 0 or y >= self.height:

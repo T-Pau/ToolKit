@@ -33,17 +33,18 @@ import sys
 import traceback
 from typing import Any, Callable, IO
 
+import MessageHandlerFile
 
-class AtomicOutput:
+class AtomicOutput(MessageHandlerFile.MessageHandlerFile):
     """Create output file only if no errors occurred."""
 
     def __init__(self):
+        super().__init__(sys.stderr, sys.argv[0])
         self.binary = False
         self.filename = None
         self.only_if_changed = False
         self.temp_name = None
         self.file = None
-        self.ok = True
 
     def set_filename(self, filename: str, binary: bool = False):
         """Set output filename.
@@ -98,13 +99,8 @@ class AtomicOutput:
         """
 
         if self.file is None:
-            self.file = open(self.get_filename(), self.mode())
+            self.file = open(self.get_filename(), self._mode())
         return self.file
-
-    def fail(self) -> None:
-        """Mark the output as failed, discarding the output."""
-
-        self.ok = False
 
     def abort(self, message: str) -> None:
         """Abort the operation with an error message and discard the output.
@@ -134,25 +130,6 @@ class AtomicOutput:
         if self.temp_name and os.path.exists(self.temp_name):
             os.remove(self.temp_name)
 
-    def warning(self, message: str) -> None:
-        """Print warning.
-        
-        Arguments:
-            message: Warning message.
-        """
-
-        print(message, file=sys.stderr)
-
-    def error(self, message: str) -> None:
-        """Report an error and mark the output as failed.
-        
-        Arguments:
-            message: The error message.
-        """
-
-        print(message, file=sys.stderr)
-        self.fail()
-
     def run(self, code: Callable[[], None]) -> bool:
         """Run code that produces the output file. If an uncaught exception occurs, the output file is discarded.
 
@@ -176,7 +153,13 @@ class AtomicOutput:
 
     # private methods
 
-    def mode(self) -> str:
+    def _mode(self) -> str:
+        """Get mode for opening the output file.
+        
+        Returns:
+            The mode for opening the output file.
+        """
+
         if self.binary:
             return "wb"
         else:

@@ -30,7 +30,9 @@ import sys
 import os
 import traceback
 
-class FileReader:
+import MessageHandler
+
+class FileReader(MessageHandler.MessageHandler):
     """Read file line by line with error reporting and preprocessor."""
     class Source:
         def __init__(self, filename):
@@ -51,18 +53,20 @@ class FileReader:
         def message_prefix(self):
             return f"{self.filename}:{self.line_number}: "
         
-    def __init__(self, filename: str, preprocess: bool = False, defines: dict = {}):
+    def __init__(self, filename: str, preprocess: bool = False, defines: dict = {}, message_handler: MessageHandler.MessageHandler | None = None):
         """Initialize FileReader.
         
         Arguments:
             filename: file to read
             preprocess: whether to run preprocessor
             defines: dictionary with preprocessor defines
+            message_handler: message handler to use for error reporting
         """
+        super().__init__()
         self.preprocess = preprocess
         self.defines = defines
         self.sources = [FileReader.Source(filename)]
-        self.ok = True
+        self.message_handler = message_handler
 
     def __iter__(self):
         return self
@@ -88,45 +92,18 @@ class FileReader:
                 return line
             self.sources.pop()
 
-    def fail(self):
-        """Mark reader as failed."""
 
-        self.ok = False
-
-    def message(self, message: str):
-        """Print message to standard error, prefixed with current file position.
-
-        Arguments:
-            message: message to print
-        """
-
-        source = self._current_source()
-        if source is not None:
-            print(source.message_prefix(), file=sys.stderr, end="")
-        print(message, file=sys.stderr)
-
-    def error(self, message: str | BaseException):
-        """Print error message and mark reader as failed.
-
-        Arguments:
-            message: error message or exception to print
-        """
-
-        if isinstance(message, BaseException):
-            if "TOOLKIT_DEBUG" in os.environ:
-                traceback.print_exception(message)
-            message = str(message)
-        self.message("error: " + message)
-        self.fail()
-    
-    def warning(self, message: str):
-        """Print warning message.
-
-        Arguments:
-            message: warning message to print
-        """
-
-        self.message("warning: " + message)
+    def message(self, message: str, prefix: str | None = None, file: str | None = None, position: int | str | None = None, fail: bool = False) -> None:
+        if file is None:
+            source = self._current_source()
+            if source is not None:
+                file = source.filename
+                position = source.line_number
+        
+        if self.message_handler is not None:
+            self.message_handler.message(message, prefix, file, position, fail)
+        else:
+            MessageHandler.message(message, prefix, file, position, fail)
 
     def _current_source(self) -> "FileReader.Source | None":
         """Get current source.
