@@ -1,3 +1,5 @@
+from typing import IO, Any
+
 from Buffer import Buffer
 
 # TODO: double check directory parsing
@@ -322,7 +324,7 @@ class Disk:
             raise RuntimeError(f"block {track},{sector} already used")
         self.tracks[track].write(sector, data)
     
-    def output(self, file) -> None:
+    def output(self, file:IO[Any]) -> None:
         """Write disk image to file.
 
         Arguments:

@@ -25,6 +25,7 @@
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from copy import copy
+from PIL import Image
 
 from Palette import Palette
 import PaletteImage
@@ -41,7 +42,7 @@ class CharacterImage:
         0x0040ff40: None,
     })
 
-    def __init__(self, character_width: int, character_height: int, filename: str|None = None, image=None, palette=None, additional_palette=None, pixel_size=None):
+    def __init__(self, character_width: int, character_height: int, filename: str|None = None, image: Image.Image|None = None, palette: Palette|None = None, additional_palette:dict[int|str, int | None] | list[int|str|list[int|str]]|None = None, pixel_size:PaletteImage.PixelSize|None = None):
         """Initialize CharacterImage.
         
         Arguments:
