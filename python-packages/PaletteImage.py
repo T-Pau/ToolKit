@@ -63,7 +63,7 @@ class PaletteImage:
         if filename is not None:
             if image is not None:
                 raise RuntimeError(f"both filename and image given for PaletteImage")
-            self.image = Image.open(filename)
+        self.image = Image.open(filename)
         elif image is not None:
             self.image = image
         else:
@@ -136,8 +136,12 @@ class Window:
             self.image = image
             self.x_offset = x_offset
             self.y_offset = y_offset
-        self.width = width
-        self.height = height
+            self.width = image.width
+            self.height = image.height
+        if width is not None:
+            self.width = width
+        if height is not None:
+            self.height = height
 
         if self.x_offset < 0 or self.x_offset + self.width > self.image.width or self.y_offset < 0 or self.y_offset + self.height > self.image.height:
             raise ValueError("window larger than image")

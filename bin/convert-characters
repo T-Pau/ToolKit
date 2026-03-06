@@ -78,11 +78,13 @@ class Spec:
                 self.align = None
 
     class Characters:
-        def __init__(self, yaml_spec):
+        def __init__(self, yaml_spec, spec):
             self.additional_palette = Spec.decode(yaml_spec, "additional-palette")
             self.charset = Spec.decode(yaml_spec, "charset", 0)
-            if type(self.charset) is not int:
-                raise RuntimeError("charset must be integer")
+            if isinstance(self.charset, str):
+                self.charset = spec.charset_index(self.charset)
+            elif not isinstance(self.charset, int):
+                raise RuntimeError("charset must be integer or string")
             self.char_size_x = Spec.decode(yaml_spec, "char-size-x", 1)
             self.char_size_y = Spec.decode(yaml_spec, "char-size-y", 1)
             self.file = Spec.decode(yaml_spec, "file", required=True)
@@ -143,7 +145,7 @@ class Spec:
                 self.charset = [Spec.Charset(Spec.decode(yaml_spec, "charset"), self)]
 
             if "characters" in yaml_spec:
-                self.characters = [Spec.Characters(spec) for spec in yaml_spec["characters"]]
+                self.characters = [Spec.Characters(spec, self) for spec in yaml_spec["characters"]]
             else:
                 self.characters = []
 
@@ -152,10 +154,15 @@ class Spec:
                 for image_spec in yaml_spec["images"]:
                     if "type" in image_spec and image_spec["type"] != "charset":
                         # TODO: print deprecation warning
-                        self.characters.append(Spec.Characters(image_spec))
+                        self.characters.append(Spec.Characters(image_spec, self))
                     else:
                         self.images.append(Spec.Image(image_spec, self))
 
+    def charset_index(self, name):
+        for (i, c) in enumerate(self.charset):
+            if c.name == name:
+                return i
+        raise RuntimeError(f"unknown charset '{name}'")
 
 class ConvertCharacters(Script.Script):
     def __init__(self) -> None:

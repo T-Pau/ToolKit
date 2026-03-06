@@ -35,6 +35,7 @@ import enum
 import yaml
 
 import CellImage
+import PaletteImage
 import RunlengthEncoder
 import Script
 
@@ -64,6 +65,10 @@ class Spec:
     class Bitmap:
         def __init__(self, yaml_spec, spec):
             self.filename = Spec.decode(yaml_spec, "file", required=True)
+            self.width = Spec.decode(yaml_spec, "width")
+            self.height = Spec.decode(yaml_spec, "height")
+            self.x_offset = Spec.decode(yaml_spec, "x-offset", default_value=0)
+            self.y_offset = Spec.decode(yaml_spec, "y-offset", default_value=0)
             self.name = Spec.decode(yaml_spec, "name", default_value=os.path.splitext(os.path.basename(self.filename))[0])
             layout = Spec.decode(yaml_spec, "layout", required=True)
             if layout not in CellImage.layouts:
@@ -106,7 +111,10 @@ class ConvertBitmaps(Script.Script):
 
         for bitmap_spec in spec.bitmaps:
             filename = self.find_file(bitmap_spec.filename)
-            bitmap = CellImage.CellImage(filename, bitmap_spec.layout, bitmap_spec.unused_colors)
+            image = PaletteImage.PaletteImage(bitmap_spec.layout.palette, filename, pixel_size=bitmap_spec.layout.pixel_size)
+            if bitmap_spec.width is not None or bitmap_spec.height is not None or bitmap_spec.x_offset != 0 or bitmap_spec.y_offset != 0:
+                image = PaletteImage.Window(image, bitmap_spec.x_offset, bitmap_spec.y_offset, bitmap_spec.width, bitmap_spec.height)
+            bitmap = CellImage.CellImage(bitmap_spec.layout, image=image, unused_colors=bitmap_spec.unused_colors)
 
             # TODO: check for spec without components
 

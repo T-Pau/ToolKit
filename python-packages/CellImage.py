@@ -98,12 +98,19 @@ class Cell:
                 self.pixels[pixel_index] = x[self.pixels[pixel_index]]
 
 class CellImage:
-    def __init__(self, filename: str, layout: Layout, unused_colors: list[int]|None = None):
+    def __init__(self, layout: Layout, filename: str|None = None, image: PaletteImage.LogicalImage|None = None, unused_colors: list[int]|None = None):
         errors = []
         pixel_size = layout.pixel_size
         if pixel_size is None:
             pixel_size = PaletteImage.PixelSize(1, 1)
-        self.image = PaletteImage.PaletteImage(layout.palette, filename, pixel_size=pixel_size)
+        if image is not None and filename is not None:
+            raise RuntimeError(f"both filename and image given for CellImage")
+        if image is None and filename is None:
+            raise RuntimeError(f"neither filename nor image given for CellImage")
+        if image is not None:
+            self.image = image
+        else:
+            self.image = PaletteImage.PaletteImage(layout.palette, filename, pixel_size=pixel_size)
         self.cell_width = layout.cell_width
         self.cell_height = layout.cell_height
         if self.image.width % self.cell_width != 0 or self.image.height % self.cell_height != 0:
