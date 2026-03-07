@@ -28,15 +28,20 @@
 ; .define IRQ_DEBUG
 
 .pre_if .defined(C64)
+.pre_if !.defined(USE_OWN_END_OF_INTERRUPT)
 END_OF_IRQ = $ea81
+.pre_end
 .define USE_VICII
 
 .pre_else_if .defined(C128)
+.pre_if !.defined(USE_OWN_END_OF_INTERRUPT)
 END_OF_IRQ = $ff33
+.pre_end
 .define USE_VICII
 
 .pre_else_if .defined(MEGA65)
 .section code
+.pre_if !.defined(USE_OWN_END_OF_INTERRUPT)
 END_OF_IRQ {
     pla
     tay
@@ -45,16 +50,21 @@ END_OF_IRQ {
     pla
     rti
 }
+.pre_end
 .define USE_VICII
 
 .pre_else_if .defined(PLUS4) || .defined(C16)
+.pre_if !.defined(USE_OWN_END_OF_INTERRUPT)
 END_OF_IRQ = $fcbe
+.pre_end
 .define USE_TED
 
 .pre_else_if .defined(VIC20)
 VIC_VERTICAL_ORIGIN = VIC_CONTROL_1
 
+.pre_if !.defined(USE_OWN_END_OF_INTERRUPT)
 END_OF_IRQ = $eb18
+.pre_end
 .define USE_VIC
 
 .pre_else
