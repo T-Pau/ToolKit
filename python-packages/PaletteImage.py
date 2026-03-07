@@ -63,7 +63,7 @@ class PaletteImage:
         if filename is not None:
             if image is not None:
                 raise RuntimeError(f"both filename and image given for PaletteImage")
-        self.image = Image.open(filename)
+            self.image = Image.open(filename)
         elif image is not None:
             self.image = image
         else:
