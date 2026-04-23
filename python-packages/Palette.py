@@ -267,7 +267,6 @@ class Palette:
         
         return self.max_index.bit_length()
 
-    # Return all color values matching the given index or name.
     def get_colors(self, color: str | int) -> list[int]:
         """Return all color values matching the given index or name.
 
@@ -291,7 +290,20 @@ class Palette:
             index = color
         return [color for color, idx in self.colors.items() if idx == index]
     
-    # Return index of given name.
+    def get_color(self, color: str | int) -> int:
+        """Return the first color value matching the given index or name.
+
+        Args:
+            color: name or index to look up.
+        Returns:
+            The first matching color value.
+        Raises:
+            KeyError: If the name or index is not found in the palette.
+        """
+
+        colors = self.get_colors(color)
+        return colors[0]
+
     def get_index(self, name: str) -> int:
         """Return the index of the given name.
 

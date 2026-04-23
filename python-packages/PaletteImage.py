@@ -46,13 +46,15 @@ Attributes:
 class PaletteImage:
     """Convert image to palette indices."""
 
-    def __init__(self, palette: Palette, filename: str|None = None, image:Image.Image|None = None, pixel_size: PixelSize = PixelSize(1, 1)) -> None:
+    def __init__(self, palette: Palette, filename: str|None = None, image:Image.Image|None = None, width: int|None = None, height: int|None = None, pixel_size: PixelSize = PixelSize(1, 1)) -> None:
         """Initialize PaletteImage.
 
         Args:
             palette: Palette to use.
             filename: Name of file to load image from.
             image: Image to use.
+            width: Width of image in logical pixels.
+            height: Height of image in logical pixels.
             pixel_size: Size of logical pixels.
         """
 
@@ -60,17 +62,30 @@ class PaletteImage:
         self.filename = filename
         self.pixel_size = pixel_size
 
+        given = 0
         if filename is not None:
-            if image is not None:
-                raise RuntimeError(f"both filename and image given for PaletteImage")
+            given += 1
+        if image is not None:
+            given += 1
+        if width is not None:
+            if height is None:
+                raise RuntimeError(f"height must be given if width is given for PaletteImage")
+            given += 1
+        elif height is not None:
+            raise RuntimeError(f"width must be given if height is given for PaletteImage")
+        if given != 1:
+            raise RuntimeError(f"exactly one of filename, image, or width and height must be given for PaletteImage")
+
+        if pixel_size.x < 1 or pixel_size.y < 1:
+            raise RuntimeError(f"invalid pixel size {pixel_size} at {self.filename}")
+
+        if filename is not None:
             self.image = Image.open(filename)
         elif image is not None:
             self.image = image
         else:
-            raise RuntimeError(f"neither filename nor image given for PaletteImage")
-        
-        if pixel_size.x < 1 or pixel_size.y < 1:
-            raise RuntimeError(f"invalid pixel size {pixel_size} at {self.filename}")
+            self.image = Image.new("RGB", (width * pixel_size.x, height * pixel_size.y))
+
         if self.image.width % self.pixel_size.x != 0 or self.image.height % self.pixel_size.y != 0:
             raise FilePositionException(f"image dimensions ({self.image.width}x{self.image.height}) are not multiple of pixel size {self.pixel_size}", file=self.filename)
         self.width = self.image.width // self.pixel_size.x
@@ -110,6 +125,28 @@ class PaletteImage:
                 elif color != sub_color:
                     raise FilePositionException(f"non-uniform logical pixel", file=self.filename, position=(x * self.pixel_size.x, y * self.pixel_size.y), position_end=((x + 1) * self.pixel_size.x - 1, (y + 1) * self.pixel_size.y - 1))
         return color
+
+    def set(self, x: int, y: int, color: int) -> None:
+        """Set logical pixel at (x, y) to color.
+
+        Args:
+            x: X coordinate of logical pixel.
+            y: Y coordinate of logical pixel.
+            color: Palette index to set logical pixel to.
+
+        Raises:
+            ValueError: If (x, y) is outside image or color is not in palette.
+        """
+
+        if x < 0 or x >= self.width or y < 0 or y >= self.height:
+            raise ValueError(f"invalid coordinates ({x}, {y})")
+        color = self.palette.get_color(color)
+
+        image_x = x * self.pixel_size.x
+        image_y = y * self.pixel_size.y
+        for sub_y in range(self.pixel_size.y):
+            for sub_x in range(self.pixel_size.x):
+                self.image.putpixel((image_x + sub_x, image_y + sub_y), color)
 
 class Window:
     """A window into a PaletteImage."""

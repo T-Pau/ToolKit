@@ -223,7 +223,8 @@ class Screens:
         if not self.ok:
             return False
 
-        self.write_output(output_file)
+        if output_file is not None:
+            self.write_output(output_file)
         return True
 
     def error(self, message):
