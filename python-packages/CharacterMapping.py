@@ -196,6 +196,7 @@ class CharacterMapping:
         
         Returns:
             Tuple of parsed source character and remaining arguments.
+        
         Raises:
             ValueError: If source character is invalid or too large.
         """
@@ -212,8 +213,10 @@ class CharacterMapping:
 
         Args:
             arguments: Mapping specification.
+        
         Returns:
             Tuple of parsed target character and remaining arguments.
+        
         Raises:
             ValueError: If target character is invalid or too large.
         """
@@ -228,6 +231,7 @@ class CharacterMapping:
         
         Returns:
             Tuple of parsed integer and remaining arguments.
+        
         Raises:
             ValueError: If integer is invalid or too large.
         """

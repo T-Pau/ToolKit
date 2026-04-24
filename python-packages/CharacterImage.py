@@ -92,6 +92,7 @@ class CharacterImage:
         
         Arguments:
             index: index of character to get
+        
         Returns:
             bytes of character, or None if character is a hole
         """
@@ -108,6 +109,7 @@ class CharacterImage:
         Arguments:
             x: x coordinate of character to get
             y: y coordinate of character to get
+        
         Returns:
             bytes of character, or None if character is a hole
         """

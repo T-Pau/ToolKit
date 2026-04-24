@@ -51,8 +51,10 @@ class Charset:
         
         Arguments:
             value: byte sequence representing character to add
+
         Returns:
             index of added character
+            
         Raises:
             OverflowError: If no more characters are available.
         """
@@ -71,8 +73,10 @@ class Charset:
             value1: byte sequence representing first character to add
             value2: byte sequence representing second character to add
             offset: offset between first and second character indices
+
         Returns:
             index of first added character
+
         Raises:
             OverflowError: If no pair of characters is available.
             RuntimeError: If enable_pairs is False.
@@ -119,6 +123,7 @@ class Charset:
         
         Returns:
             next free character index
+
         Raises:
             OverflowError: If no free character index is available.
         """
@@ -137,6 +142,7 @@ class Charset:
         
         Returns:
             next free character index pair
+
         Raises:
             OverflowError: If no free character index pair is available.
         """
@@ -151,6 +157,7 @@ class Charset:
 
         Arguments:
             index: index of character to get
+
         Returns:
             byte sequence representing character at given index
         """
@@ -174,6 +181,7 @@ class Charset:
 
         Arguments:
             full: whether to include all characters or only up to the last used one
+
         Returns:
             bytes representing the character set
         """

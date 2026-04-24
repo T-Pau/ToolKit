@@ -295,8 +295,10 @@ class Palette:
 
         Args:
             color: name or index to look up.
+        
         Returns:
             The first matching color value.
+        
         Raises:
             KeyError: If the name or index is not found in the palette.
         """
