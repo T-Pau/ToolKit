@@ -202,5 +202,20 @@ class Window:
             raise ValueError(f"invalid coordinates ({x}, {y})")
         return self.image.get(self.x_offset + x, self.y_offset + y)
 
+    def set(self, x: int, y: int, color: int) -> None:
+        """Set logical pixel at (x, y) to color.
+
+        Args:
+            x: X coordinate of logical pixel in window.
+            y: Y coordinate of logical pixel in window.
+            color: Palette index to set logical pixel to.
+
+        Raises:
+            ValueError: If (x, y) is outside window or color is not in palette.
+        """
+        if x < 0 or x >= self.width or y < 0 or y >= self.height:
+            raise ValueError(f"invalid coordinates ({x}, {y})")
+        self.image.set(self.x_offset + x, self.y_offset + y, color)
+
 LogicalImage: TypeAlias = PaletteImage | Window
 """A logical image, either a PaletteImage or a Window into one."""
