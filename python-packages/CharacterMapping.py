@@ -48,8 +48,8 @@ Mapping specifications can be given as a list or a string:
 
 import re
 
-pattern_hex = r"(?:0x|$)([0-9a-fA-F]+)(.*)"
-pattern_dec = r"([0-9]+)(.*)"
+pattern_hex = r"^(?:0x|\$)([0-9a-fA-F]+)(.*)"
+pattern_dec = r"^([0-9]+)(.*)"
 
 class CharacterMapping:
     """Map Unicode characters to native encoding."""
@@ -93,7 +93,7 @@ class CharacterMapping:
             mappings: List of mappings to add.
         """
 
-        self.charmap = {}
+        self.charmap: dict[str, bytes] = {}
         for mapping in mappings:
             self.add_mapping(mapping)
     
@@ -110,29 +110,28 @@ class CharacterMapping:
         if type(arguments) is list:
             if len(arguments) == 2:
                 if type(arguments[1]) is not int:
-                    raise ValueError("target must be an integer")
+                    raise ValueError(f"target must be an integer, got {type(arguments[1])}")
                 self.add_single(arguments[0], arguments[1])
             elif len(arguments) == 3:
                 if type(arguments[2]) is not int:
-                    raise ValueError("target must be an integer")
+                    raise ValueError(f"target must be an integer, got {type(arguments[2])}")
                 self.add_range(arguments[0], arguments[1], arguments[2])
             else:
-                raise ValueError("invalid mapping with {len(arguments)} elements")
+                raise ValueError(f"invalid mapping with {len(arguments)} elements")
         elif type(arguments) is str:
+            specification = arguments.strip()
             (source_start, arguments) = self._parse_source(arguments)
             if arguments == "":
-                raise ValueError("incomplete map specification")
+                raise ValueError(f"incomplete map specification '{specification}'")
             if arguments[0] == '-':
                 (source_end, arguments) = self._parse_source(arguments[1:])
                 if arguments == "":
-                    raise ValueError("incomplete map specification")
+                    raise ValueError(f"incomplete map specification '{specification}'")
             else:
                 source_end = source_start
-            if arguments[0] != ':':
-                raise ValueError("expected ':' in map specification")
-            (target, arguments) = self._parse_target(arguments[1:])
+            (target, arguments) = self._parse_target(arguments)
             if arguments != "":
-                raise ValueError("trailing garbage in map specification")
+                raise ValueError(f"trailing garbage in map specification '{specification}'")
             self.add_range(source_start, source_end, target)
         else:
             raise ValueError(f"invalid mapping specification type {type(arguments)}")
@@ -163,8 +162,17 @@ class CharacterMapping:
         """
 
         if type(character) == int:
-            character = chr(character)
-        self.charmap[character] = target.to_bytes(1, "little")
+            key = chr(character)
+        elif type(character) == str:
+            key = character
+        else:
+            raise ValueError("invalid character type")
+        self.charmap[key] = target.to_bytes(1, "little")
+
+    def __getitem__(self, character: str) -> int:
+        if character not in self.charmap:
+            raise ValueError(f"unmapped character '{character}'")
+        return int.from_bytes(self.charmap[character], "little")
 
     def encode(self, string: str) -> bytes:
         """Encode Unicode string.
@@ -202,9 +210,9 @@ class CharacterMapping:
         """
         arguments = arguments.strip()
         if arguments[0] == "'" or arguments[0] == '"':
-            if arguments[3] != arguments[0]:
-                raise ValueError("character map source longer than one character")
-            return (arguments[2], arguments[3:].strip())
+            if arguments[2] != arguments[0]:
+                raise ValueError(f"character map source '{arguments}' longer than one character")
+            return (arguments[1], arguments[3:].strip())
         else:
             return self._parse_int(arguments, 0xffff)
 
@@ -237,13 +245,13 @@ class CharacterMapping:
         """
         arguments = arguments.strip()
         if match := re.match(pattern_hex, arguments):
-            value = int("0x" + match.group(1))
+            value = int(match.group(1), 16)
             arguments = match.group(2)
         elif match := re.match(pattern_dec, arguments):
-            value = int(match.group(1))
+            value = int(match.group(1), 10)
             arguments = match.group(2)
         else:
-            raise ValueError("invalid mapping value")
+            raise ValueError(f"invalid mapping value '{arguments}'")
         if value > max_value:
-            raise ValueError("mapping value too large")
+            raise ValueError(f"mapping value too large: {value}, maximum is {max_value}")
         return (value, arguments.strip())

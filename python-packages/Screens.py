@@ -35,57 +35,13 @@ import enum
 
 import AssemblerOutput
 import RunlengthEncoder
+import CharacterMapping
 
 class PageMode(enum.Enum):
     SINGLE = "single"
     OBJECTS = "objects"
     PAGES = "pages"
 
-
-class MapParser:
-    hex_chars = r"^\$([0-9A-Fa-f]+)"
-
-    def __init__(self, line:str) -> None:
-        self.arguments = line[3:].strip()
-        self.parse()
-
-    def parse(self):
-        self.start = self.get_source()
-        if self.arguments[0] == "-":
-            self.eat(1)
-            self.end = self.get_source()
-        else:
-            self.end = self.start
-        if self.arguments[0] != " ":
-            raise RuntimeError("expected ' '")
-        self.eat_space()
-        self.target = self.get_hex()
-    
-    def get_source(self) -> int:
-        if self.arguments[0] == "'":
-            if self.arguments[2] != "'":
-                raise RuntimeError("multi-char source") # TODO: better message
-            source = ord(self.arguments[1])
-            self.eat(3)
-        elif self.arguments[0] == "$":
-            source = self.get_hex()
-        else:
-            raise RuntimeError("invalid mapping source")
-        return source
-    
-    def eat(self, length) -> None:
-        self.arguments = self.arguments[length:]
-
-    def eat_space(self) -> None:
-        self.arguments = self.arguments.lstrip()
-
-    def get_hex(self) -> int:
-        match = re.match(self.hex_chars, self.arguments)
-        if not match:
-            raise RuntimeError(f"invalid hex number '{self.arguments}'")
-        value = int(match.group(1), 16)
-        self.eat(len(match.group(0)))
-        return value
 
 class ExpressionParser:
     def __init__(self, defines):
@@ -191,7 +147,7 @@ class Screens:
         if options is not None:
             self.set_options(options)
         self.defines = {}
-        self.charmap = {}
+        self.charmap = CharacterMapping.CharacterMapping()
 
         if defines is not None:
             for define in defines:
@@ -364,13 +320,13 @@ class Screens:
         elif line.startswith("postfix "):
             self.postfix = self.parse_fix(line)
         elif line.startswith("map "):
-            self.parse_map(line)
+            self.charmap.add_mapping(line[4:])
         else:
             words = line.split(" ")
             if words[0] == "image_padding_left":
-                self.image_padding_left = self.map_string(words[1])
+                self.image_padding_left = self.charmap.encode(words[1])
             elif words[0] == "image_padding_right":
-                self.image_padding_right = self.map_string(words[1])
+                self.image_padding_right = self.charmap.encode(words[1])
             elif words[0] == "line_length":
                 self.line_length = int(words[1])
             elif words[0] == "line_skip":
@@ -465,14 +421,6 @@ class Screens:
     def end(self):
         self.end_screen()
 
-    def parse_map(self, line):
-        parser = MapParser(line)
-    
-        target = parser.target
-        for source in range(parser.start, parser.end + 1):
-            self.charmap[source] = target
-            target += 1
-
     def add_bytes(self, string):
         if self.runlength_encode:
             self.encoder.add_bytes(string)
@@ -480,22 +428,16 @@ class Screens:
             self.current_screen += string
 
     def add_string(self, string, length, byte_xor=0):
-        self.add_bytes(self.map_string(string.ljust(length), byte_xor))
-
-    def map_string(self, string, byte_xor=0):
-        result = b""
-        for c in string:
-            if ord(c) not in self.charmap:
-                self.error(f"unmapped character '{c}'")
-                continue
-            result += (self.charmap[ord(c)] ^ byte_xor).to_bytes(1, byteorder="little")
-        return result
+        mapped = self.charmap.encode(string.ljust(length))
+        if byte_xor != 0:
+            mapped = bytes(b ^ byte_xor for b in mapped)
+        self.add_bytes(mapped)
 
     def parse_fix(self, line):
         # TODO: support for byte list
         start = line.find("\"")
         end = line.rfind("\"")
-        return self.map_string(line[start + 1:end])
+        return self.charmap.encode(line[start + 1:end])
 
     def replace_variable(self, match):
         if match.group() is not None:
