@@ -280,7 +280,8 @@ class ConvertCharacters(Script.Script):
                                 value = image.get_xy(image_x, image_y + image.height // 2)
                             else:
                                 value = bytes(b ^ 0xFF for b in value)
-                            charset.add_with_index(value, index + inverted_offset)
+                            if value is not None:
+                                charset.add_with_index(value, index + inverted_offset)
 
     def process_image(self, image, image_spec, prerun):
         image_width = image.width

@@ -113,6 +113,8 @@ class Charset:
         if index in self.by_index:
             raise RuntimeError(f"character {index} already set")
         else:
+            if value is None:
+                return
             self.by_index[index] = value
             if value not in self.by_value:
                 self.by_value[value] = []
@@ -189,6 +191,8 @@ class Charset:
         bytes_array = b""
         for index in range(end):
             value = self.get_value(index)
+            if value is None:
+                value = self.empty
             for byte in value:
                 bytes_array += byte.to_bytes(1, byteorder="little")
         return bytes_array

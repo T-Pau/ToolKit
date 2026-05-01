@@ -131,7 +131,8 @@ class CharacterMapping:
                 source_end = source_start
             (target, arguments) = self._parse_target(arguments)
             if arguments != "":
-                raise ValueError(f"trailing garbage in map specification '{specification}'")
+                if arguments[0] != ';':
+                    raise ValueError(f"trailing garbage in map specification '{specification}'")
             self.add_range(source_start, source_end, target)
         else:
             raise ValueError(f"invalid mapping specification type {type(arguments)}")
