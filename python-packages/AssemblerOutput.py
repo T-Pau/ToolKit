@@ -146,14 +146,14 @@ class AssemblerOutput:
             The combined name.
 
         Raises:
-            RuntimeError: If both prefix and name are None.
+            RuntimeError: If both prefix and name are None or empty.
         """
 
-        if name is None:
-            if prefix is None:
+        if name is None or name == "":
+            if prefix is None or prefix == "":
                 raise RuntimeError("neither name nor prefix specified")
             return prefix
-        elif prefix is None:
+        elif prefix is None or prefix == "":
             return name
         else:
             return f"{prefix}_{name}"
@@ -281,7 +281,7 @@ class AssemblerOutput:
             visibility_string = f".{visibility} "
         self._print_line(f"{visibility_string}{name}:")
 
-    def parts(self, name: str, parts: list, include_count: bool = True, include_index: bool = True, names: list | None = None) -> None:
+    def parts(self, name: str | None, parts: list, include_count: bool = True, include_index: bool = True, names: list | None = None) -> None:
         """Create multiple objects from parts.
 
         Args:
@@ -293,9 +293,12 @@ class AssemblerOutput:
 
         Raises:
             RuntimeError: If inside an object.
+            ValueError: If name is empty and include_index is True.
         """
         self._check_not_in_object()
         if include_index:
+            if name is None or name == "":
+                raise ValueError("name required for for include_index")
             if include_count:
                 self.begin_object(f"{name}_count")
                 self.byte(len(parts))
