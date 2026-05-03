@@ -59,12 +59,14 @@ class Spec:
             self.default_string_encoding = Spec.decode(yaml, "default_string_encoding")
             self.include_count = Spec.decode(yaml, "include_count", True)
             self.prefix = Spec.decode(yaml, "prefix", "")
+            self.row_length = Spec.decode(yaml, "row_length")
 
     class Field:
         def __init__(self, yaml: dict[str, Any], settings: 'Spec.Settings') -> None:
             self.type = FieldType(Spec.decode(yaml, "type", "single"))
             self.encoding = Spec.decode(yaml, "encoding")
             self.default_value = Spec.decode(yaml, "default_value")
+            self.empty_value = Spec.decode(yaml, "empty_value")
             self.length = Spec.decode(yaml, "length", 1)
             self.nul_terminate = Spec.decode(yaml, "nul_terminate", False)
             self.padding = Spec.decode(yaml, "padding", self.default_padding())
@@ -75,7 +77,7 @@ class Spec:
             elif self.type == FieldType.STRING:
                 return " "
 
-    def decode_struct(self, yaml: dict[str, Any]) -> dict[str, Any]:
+    def decode_struct(self, yaml: dict[str, Any], parent: dict[str, Any]|None = None) -> dict[str, Any]:
         struct = {}
         for key in self.fields.keys():
             self.decode_field(yaml, key, struct, set())
@@ -101,18 +103,42 @@ class Spec:
         else:
             raise RuntimeError(f"no known value for field {key}")
 
+        value = self.pad_field(value, field)
+        struct[key] = value
+        return value
+    
+    def pad_field(self, value: Any, field: 'Spec.Field') -> Any:
         if field.length > 1:
             while len(value) < field.length:
                 if type(value) == list:
                     value.append(field.padding)
                 else:
                     value += field.padding
-
-        struct[key] = value
         return value
+    
+    def empty_struct(self) -> dict[str, Any]:
+        struct = {}
+        for key in self.fields.keys():
+            field = self.fields[key]
+            if field.empty_value is not None:
+                value = self.parse_default_value(field.empty_value, {}, struct, set())
+            elif field.default_value is not None:
+                value = self.parse_default_value(field.default_value, {}, struct, set())
+            elif field.type == FieldType.MULTI:
+                value = []
+            elif field.type == FieldType.OMIT:
+                value = None
+            else:
+                raise RuntimeError(f"no known value for field {key}")
 
-    def parse_default_value(self, default_value: Any, yaml: dict[str, Any], struct: dict[str, Any], dependent_fields: set[str]) -> Any:
+            struct[key] = self.pad_field(value, field)
+
+        return struct
+
+    def parse_default_value(self, default_value: Any, yaml: dict[str, Any], struct: dict[str, Any], dependent_fields: set[str], parent: dict[str, Any]|None = None) -> Any:
         # To allow non-string values, return directly if it doesn't contain a field reference or if it is only a field reference.
+        if not isinstance(default_value, str):
+            return default_value
         if default_value.find("{{") == -1:
             return default_value
         if default_value.startswith("{{") and default_value.find("}}") == len(default_value) - 2:
@@ -144,8 +170,29 @@ class Spec:
         self.structs = []
         for key in yaml["fields"].keys():
             self.fields[key] = Spec.Field(yaml["fields"][key], self.settings)
-        for struct in yaml["structs"]:
-            self.structs.append(self.decode_struct(struct))
+
+        if self.settings.row_length is not None:
+            for row in yaml["structs"]:
+                if isinstance(row, dict):
+                    if not "structs" in row:
+                        raise RuntimeError("missing 'structs' key in dictionary row")
+                    row_structs = []
+                    for struct in row["structs"]:
+                        complete_struct = dict(struct)
+                        for key in row.keys():
+                            if key != "structs":
+                                if key not in complete_struct:
+                                    complete_struct[key] = row[key]
+                        row_structs.append(complete_struct)
+                else:
+                    row_structs = row
+                for struct in row_structs:
+                    self.structs.append(self.decode_struct(struct))
+                for index in range(len(row_structs), self.settings.row_length): # type: ignore
+                    self.structs.append(self.empty_struct())
+        else:
+            for struct in yaml["structs"]:
+                self.structs.append(self.decode_struct(struct))
 
 class ParallelStruct(Script.Script):
     def __init__(self) -> None:
