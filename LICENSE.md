@@ -1,13 +1,14 @@
-Copyright (C) 2020-2025 Dieter Baron
+Copyright (C) 2020-2026 Dieter Baron
 
-This file is part of the T'Pau Toolkit.
 The authors can be contacted at <toolkit@tpau.group>.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
 are met:
+
 1. Redistributions of source code must retain the above copyright
    notice, this list of conditions and the following disclaimer.
+
 2. The names of the authors may not be used to endorse or promote
    products derived from this software without specific prior
    written permission.
