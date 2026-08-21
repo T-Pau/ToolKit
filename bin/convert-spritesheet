@@ -44,31 +44,57 @@ class OutputType(enum.Enum):
     sprite_set = "sprite-set"
     frames = "frames"
 
-class ImageSpec():
-    def __init__(self, yaml_spec: YAMLSpec.YAMLSpec) -> None:
-        self.count = None
-        self.filename_pattern = None
-        self.filename = None
-        if "filename-pattern" in yaml_spec.yaml_spec:
-            self.filename_pattern = yaml_spec.get_str("filename-pattern")
-            self.first = yaml_spec.get_int("first", 1)
-            self.last = yaml_spec.get_int("last", 1)
+palette_entry = YAMLSpec.DictEntry(YAMLSpec.palette_schema, required=False, inherit=True)
+
+def convert_margin_or_ignore(value):
+    if isinstance(value, str):
+        if value.lower() == "ignore":
+            return None
         else:
-            self.filename = yaml_spec.get_str("filename")
+            raise ValueError(f"invalid value for margin: {value}")
+    return value
+    
+margin_or_ignore_schema = YAMLSpec.ScalarSchema([int, str], int|None,
+    converter=convert_margin_or_ignore
+)
 
-class SheetSpec():
-    def __init__(self, yaml_spec: YAMLSpec.YAMLSpec) -> None:
-        self.max_layers = yaml_spec.get_int("max_layers", 1)
-        self.image_spec = ImageSpec(yaml_spec.get_spec("image"))
-        self.output_type = OutputType(yaml_spec.get_str("output-type", "sprite-set"))
+default_palette = copy(Palette.c64)
+default_palette.add_color(Palette.get_color("transparent"), None)
 
-class Spec():
-    def __init__(self, spec_file: str) -> None:
-        spec = YAMLSpec.YAMLSpec(spec_file)
-        self.runlength_encoding = spec.get_bool("runlength-encoding", False)
-        self.pointer_offset = spec.get("pointer-offset", default_value=0, value_type=[str, int])
-        self.name_prefix = spec.get_str("name-prefix", "sprite")
-        self.sheets = [SheetSpec(sheet_spec) for sheet_spec in spec.get_spec_list("sheets", allow_single=True)]
+schema = YAMLSpec.DictSchema("SpriteSheetSpec", 
+    {
+        "runlength-encoding": YAMLSpec.DictEntry(YAMLSpec.bool_schema, default_value=False),
+        "pointer-offset": YAMLSpec.DictEntry(YAMLSpec.str_schema, default_value=0),
+        "name-prefix": YAMLSpec.DictEntry(YAMLSpec.str_schema, default_value="sprite"),
+        "palette": YAMLSpec.DictEntry(YAMLSpec.palette_schema, default_value=default_palette),
+        "sheets": YAMLSpec.ArraySchema(
+            YAMLSpec.DictSchema("SheetSpec", 
+                {
+                    "max_layers": YAMLSpec.int_schema,
+                    "palette": palette_entry,
+                    "image": YAMLSpec.DictEntry(
+                        YAMLSpec.DictSchema("ImageSpec", 
+                            {
+                                "filename": YAMLSpec.DictEntry(YAMLSpec.str_schema, required=False),
+                                "filename-pattern": YAMLSpec.DictEntry(YAMLSpec.str_schema, required=False),
+                                "first": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=1),
+                                "last": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=1),
+                                "left-margin": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=0),
+                                "right-margin": YAMLSpec.DictEntry(margin_or_ignore_schema, default_value=0),
+                                "top-margin": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=0),
+                                "bottom-margin": YAMLSpec.DictEntry(margin_or_ignore_schema, default_value=0),
+                                "x-spacing": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=0),
+                                "y-spacing": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=0),
+                            },
+                            validator=lambda spec: f"image must have either filename-pattern or filename" if (spec.filename_pattern is None) == (spec.filename is None) else None
+                        )
+                    ),
+                    "output-type": YAMLSpec.DictEntry(YAMLSpec.enum_schema(OutputType), default_value=OutputType.sprite_set)
+                }
+            ), allow_scalar=True
+        )
+    }
+)
 
 class Frame():
     def __init__(self, image: PaletteImage.LogicalImage) -> None:
@@ -117,13 +143,14 @@ class ConvertSpriteSheet(Script.Script):
         return self.args.specs
     
     def execute_sub(self):
-        spec = Spec(self.input_filename())
+        spec = YAMLSpec.YAMLSpec(schema).load(self.find_file(self.args.specs))
+        print(spec)
 
         for sheet in spec.sheets:
             self.convert_sheet(sheet, spec)
     
-    def convert_sheet(self, sheet: SheetSpec, spec: Spec):
-        sprite_images = self.load_sprites(sheet.image_spec)
+    def convert_sheet(self, sheet, spec):
+        sprite_images = self.load_sprites(sheet.image, sheet.palette)
         frames = []
 
         for sprite_image in sprite_images:
@@ -145,7 +172,7 @@ class ConvertSpriteSheet(Script.Script):
             self.convert_sprite_set(frames, layers, sheet, spec)
 
 
-    def convert_frames(self, frames: list[Frame], layers: int, sheet: SheetSpec, spec: Spec):
+    def convert_frames(self, frames: list[Frame], layers: int, sheet, spec):
         sprites = []
 
         for frame in frames:
@@ -180,7 +207,7 @@ class ConvertSpriteSheet(Script.Script):
             self.assembler.data(c)
         self.assembler.end_object() 
 
-    def convert_sprite_set(self, frames: list[Frame], layers: int, sheet: SheetSpec, spec: Spec):
+    def convert_sprite_set(self, frames: list[Frame], layers: int, sheet, spec):
         sprite_sheet = Charset.Charset(len(frames) * layers, b'\x00')
         pointers = []
 
@@ -222,10 +249,8 @@ class ConvertSpriteSheet(Script.Script):
         self.assembler.end_object() 
 
 
-    def load_sprites(self, image_spec: ImageSpec):
-        palette = copy(Palette.c64)
-        palette.add_color(Palette.get_color("transparent"), None)
-        images = []
+    def load_sprites(self, image_spec, palette: Palette.Palette) -> list[PaletteImage.LogicalImage]:
+        images: list[PaletteImage.PaletteImage] = []
         if image_spec.filename_pattern is not None:
             for i in range(image_spec.first, image_spec.last + 1):
                 filename = self.find_file(image_spec.filename_pattern % i)
@@ -235,20 +260,20 @@ class ConvertSpriteSheet(Script.Script):
             image = PaletteImage.PaletteImage(filename=self.find_file(image_spec.filename), palette=palette)
             images.append(image)
 
+        slice_spec = PaletteImage.SliceSpecification(
+            width=24,
+            height=21,
+            left_margin=image_spec.left_margin,
+            right_margin=image_spec.right_margin,
+            top_margin=image_spec.top_margin,
+            bottom_margin=image_spec.bottom_margin,
+            x_spacing=image_spec.x_spacing,
+            y_spacing=image_spec.y_spacing)
+
         sprites = []
         for image in images:
-            if image.width % 24 != 0:
-                raise RuntimeError(f"image width not multiple of 24 in {image.filename}")
-            if image.height % 21 != 0:
-                raise RuntimeError(f"image height not multiple of 21 in {image.filename}")
-            rows = image.height // 21
-            cols = image.width // 24
-            if rows == 1 and cols == 1:
-                sprites.append(image)
-                continue
-            for y in range(0, rows):
-                for x in range(0, cols):
-                    sprites.append(PaletteImage.Window(image, x * 24, y * 21, 24, 21))
+            sprites += image.slice(slice_spec)
         return sprites
+
 
 ConvertSpriteSheet().run()

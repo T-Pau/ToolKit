@@ -24,453 +24,418 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, NoReturn, TypeAlias
+from dataclasses import make_dataclass
+import enum
+from types import UnionType
+from typing import Any, Callable, NoReturn, TypeAlias, get_args, get_origin
 import yaml
 
 import Palette
 
-type_spec: TypeAlias = type | list[type]
+yaml_type_spec: TypeAlias = Any
+type_spec: TypeAlias = Any
 
-class YAMLSpec:
-    """Class for decoding and accessing specification data from YAML."""
 
-    def __init__(self, spec: str|dict|None, path: str = "", filename: str = "") -> None:
-        """Initialize Spec with given YAML specification.
+def as_annotation(value_type: Any) -> Any:
+    """Convert a schema value specification to a real Python annotation.
+
+    This accepts the common Python annotation forms directly, including unions
+    like int | None, and also accepts tuple/list metadata for convenience.
+    """
+
+    if value_type is None:
+        return type(None)
+
+    if isinstance(value_type, (type, UnionType)):
+        return value_type
+
+    if isinstance(value_type, tuple):
+        if not value_type:
+            return type(None)
+        result = value_type[0]
+        for item in value_type[1:]:
+            result = result | item
+        return result
+
+    if isinstance(value_type, list):
+        if not value_type:
+            return type(None)
+        result = value_type[0]
+        for item in value_type[1:]:
+            result = result | item
+        return result
+
+    origin = get_origin(value_type)
+    if origin is not None:
+        return value_type
+
+    return value_type
+
+Converter: TypeAlias = Callable[[Any], Any]
+Validator: TypeAlias = Callable[[Any], str|None]
+
+class Schema:
+    """Base class for value specifications."""
+
+    def __init__(self, yaml_type: yaml_type_spec, value_type: type_spec, validator: Validator|None = None) -> None:
+        """Initialize Schema with given parameters.
 
         Args:
-            spec: The YAML specification data or file name.
-            path: The path for a sub-specification within the YAML data, using dot notation. "" indicates the top level.
+            yaml_type: The expected type of the YAML value.
+            value_type: The type of the value.
+            validator: A function to validate the value. It should return None if the value is valid, or an error message if it is not.
+        """
+
+        self.yaml_type = yaml_type
+        self.value_type = value_type
+        self.validator = validator
+
+    def convert(self, value: Any, parents: list[Any], path: str = "") -> Any:
+        """Convert a YAML value to its runtime representation.
+        
+        Args:
+            value: The YAML value to convert.
+            parents: The list of parent objects in the YAML structure, used for inheriting values.
+            path: The path to the value in the YAML structure, used for error messages.
+        """
+        raise NotImplementedError("convert() must be implemented in subclasses")
+
+
+    @staticmethod
+    def matches_yaml_type(value: Any, expected: type_spec) -> bool:
+        if expected is None:
+            return value is None
+
+        if isinstance(expected, (type, UnionType)):
+            if expected is type(None):
+                return value is None
+            if isinstance(expected, UnionType):
+                return any(Schema.matches_yaml_type(value, item) for item in get_args(expected))
+            return isinstance(value, expected)
+
+        if isinstance(expected, list):
+            return any(Schema.matches_yaml_type(value, item) for item in expected)
+
+        if isinstance(expected, tuple):
+            return any(Schema.matches_yaml_type(value, item) for item in expected)
+
+        origin = get_origin(expected)
+        if origin is not None:
+            if origin is list:
+                return isinstance(value, list)
+            if origin is tuple:
+                return isinstance(value, tuple)
+            if origin is dict:
+                return isinstance(value, dict)
+            return any(Schema.matches_yaml_type(value, item) for item in get_args(expected))
+
+        return False
+    
+class ScalarSchema(Schema):
+    """Specification for a scalar value in a YAMLSpec."""
+
+    def __init__(self, yaml_type: yaml_type_spec, value_type: type_spec, converter: Converter|None = None, validator: Validator|None = None) -> None:
+        """Initialize ScalarSchema with given value type.
+
+        Args:
+            yaml_type: The expected type of the YAML value.
+            value_type: The expected type of the value.
+            converter: A function to convert the YAML value to the desired type.
+            validator: A function to validate the value. It should return None if the value is valid, or an error message if it is not.
+        """
+
+        super().__init__(yaml_type=yaml_type, value_type=value_type, validator=validator)
+        self.converter = converter
+
+    def convert(self, value: Any, parents: list[Any], path: str = "") -> Any:
+        if not Schema.matches_yaml_type(value, self.yaml_type):
+            raise TypeError(f"{path}: Expected {self.yaml_type}, got {type(value).__name__}")
+        if self.converter is not None:
+            try:
+                value = self.converter(value)
+            except Exception as e:
+                raise ValueError(f"{path}: Conversion error: {e}")
+        if self.validator is not None:
+            if error := self.validator(value):
+                raise ValueError(error)
+        return value
+
+
+class ArraySchema(Schema):
+    """Specification for an array value in a YAMLSpec."""
+
+    def __init__(self, element_spec: Schema, minimum_length: int = 0, maximum_length: int|None = None, validator: Validator|None = None, allow_scalar: bool = False) -> None:
+        """Initialize ArraySchema with given item type.
+
+        Args:
+            element_spec: The specification for the list elements.
+            minimum_length: The minimum length of the array.
+            maximum_length: The maximum length of the array.
+            validator: A function to validate the value. It should return None if the value is valid, or an error message if it is not.
+            allow_scalar: Whether to allow a scalar value which will be converted to a single element list.
+        """
+        yaml_type = [list[element_spec.yaml_type], type(None)] if allow_scalar else list[element_spec.yaml_type]
+        super().__init__(yaml_type=yaml_type, value_type=list[element_spec.value_type], validator=validator)
+        self.element_spec = element_spec
+        self.minimum_length = minimum_length
+        self.maximum_length = maximum_length
+        self.allow_scalar = allow_scalar
+
+    def convert(self, value: Any, parents: list[Any], path: str = "") -> list[Any]:
+        if not isinstance(value, list):
+            if self.allow_scalar:
+                value = [value]
+            else:
+                raise TypeError(f"{path}: Expected list, got {type(value).__name__}")
+
+        if len(value) < self.minimum_length:
+            raise ValueError(f"{path}: List shorter than minimum length {self.minimum_length}")
+        if self.maximum_length is not None and len(value) > self.maximum_length:
+            raise ValueError(f"{path}: List longer than maximum length {self.maximum_length}")
+
+        result = [self.element_spec.convert(item, parents=parents, path=f"{path}[{i}]") for i, item in enumerate(value)]
+        if self.validator is not None:
+            error = self.validator(result)
+            if error is not None:
+                raise ValueError(error)
+        return result
+
+
+class DictEntry:
+    """Specification for an entry in a  dictionary value in a YAMLSpec."""
+
+    def __init__(self, value_spec: Schema, required: bool|None = None, default_value: Any = None, inherit: bool = False, description: str|None = None, validator: Callable[[Any], str|None]|None = None) -> None:
+        """Initialize DictEntry with given value type.
+
+        Args:
+            value_spec: The specification for the dictionary values.
+            required: Whether the dictionary entry is required. If None, it will be required if no default value is provided.
+            default_value: The default value for the dictionary entry.
+            inherit: Whether the value should be inherited from a parent specification.
+            description: A description of the entry.
+            validator: A function to validate the value. It should return None if the value is valid, or an error message if it is not.
+        """
+
+        if default_value is not None or inherit:
+            if required is None:
+                required = False
+            elif required:
+                raise ValueError("Entry that inherits or has a defaulted value cannot be required")
+        self.required = required
+        self.value_spec = value_spec
+        self.default_value = default_value
+        self.inherit = inherit
+        self.description = description
+        self.validator = validator
+
+
+class DictSchema(Schema):
+    """Specification for a dictionary value in a YAMLSpec."""
+
+    def __init__(self, name: str, element_specs: dict[str, DictEntry|Schema], validator: Callable[[Any], str|None]|None = None) -> None:
+        """Initialize DictSchema with given key and value types.
+
+        Args:
+            element_specs: A dictionary specifying the specifications for the dictionary elements.
+            validator: A function to validate the value. It should return None if the value is valid, or an error message if it is not.
+        """
+
+        self.name = name
+        self.element_specs: dict[str, DictEntry] = {}
+        scalar_keys: set[str] = set()
+        nonscalar_keys: set[str] = set()
+        for key, entry in element_specs.items():
+            if isinstance(entry, Schema):
+                entry = DictEntry(value_spec=entry)
+            self.element_specs[key] = entry
+            if isinstance(entry.value_spec, ScalarSchema):
+                scalar_keys.add(key)
+            else:
+                nonscalar_keys.add(key)
+        self.ordered_keys = list(scalar_keys) + list(nonscalar_keys)
+        value_type = self.runtime_type()
+        super().__init__(yaml_type=dict[str, Any], value_type=value_type, validator=validator)
+
+    def runtime_type(self) -> Any:
+        fields: list[tuple[str, Any] | tuple[str, Any, Any]] = []
+        default_fields: list[tuple[str, Any, Any]] = []
+        for key, entry in self.element_specs.items():
+            field_type = as_annotation(entry.value_spec.value_type)
+            field_name = self._field_name(key)
+            if entry.required:
+                fields.append((field_name, field_type))
+            elif entry.default_value is not None:
+                default_fields.append((field_name, field_type, entry.default_value))
+            else:
+                default_fields.append((field_name, self._add_none(field_type), None))
+
+        return make_dataclass(self._field_name(self.name), fields + default_fields)
+
+    def convert(self, value: Any, parents: list[Any], path: str = "") -> Any:
+        if not isinstance(value, dict):
+            raise TypeError(f"{path}: Expected dict, got {type(value).__name__}")
+
+        if path != "" and not path.endswith(":"):
+            sub_path = path + "."
+        else:
+            sub_path = path
+
+        kwargs: dict[str, Any] = {}
+        sub_parents = parents + [kwargs]
+        for key in self.ordered_keys:
+            field_name = self._field_name(key)
+            entry = self.element_specs[key]
+            found = False
+            if key in value:
+                field_name = self._field_name(key)
+                item_spec = entry.value_spec if isinstance(entry, DictEntry) else entry
+                kwargs[field_name] = item_spec.convert(value[key], parents=sub_parents, path=f"{sub_path}{key}")
+                found = True
+            elif entry.inherit:
+                for parent in reversed(parents):
+                    if isinstance(parent, dict) and key in parent:
+                        kwargs[field_name] = parent[key]
+                        found = True
+                        break
+                    if hasattr(parent, field_name):
+                        kwargs[field_name] = getattr(parent, field_name)
+                        found = True
+                        break
+
+            if not found:
+                if entry.default_value is not None:
+                    kwargs[field_name] = entry.default_value
+                elif entry.required is True:
+                    raise KeyError(f"{path}: Missing required key: {key}")
+
+        result = self.value_type(**kwargs) # type: ignore
+        if self.validator is not None:
+            error = self.validator(result)
+            if error is not None:
+                raise ValueError(f"{path}: {error}")
+        return result
+
+    def _field_name(self, key: str) -> str:
+        """Return the field name for a given key in the dictionary.
+
+        Args:
+            key: The key to get the field name for.
+
+        Returns:
+            The field name for the given key.
+        """
+
+        return key.replace("-", "_")
+
+    def _add_none(self, original_type: Any) -> Any:
+        """Return a type that allows None in addition to the given type."""
+
+        normalized = as_annotation(original_type)
+        if isinstance(normalized, (type, UnionType)):
+            args = get_args(normalized)
+            if type(None) not in args:
+                return normalized | type(None)
+        if normalized is not type(None):
+            return normalized | type(None)
+
+        return normalized
+
+
+class YAMLSpec:
+    """Class for decoding specification data from a YAML file."""
+
+    def __init__(self, schema: Schema) -> None:
+        """Initialize YAMLSpec with given schema.
+
+        Args:
+            schema: The schema to validate the YAML specification against.
+        """
+
+        self.schema = schema
+
+
+    def load(self, filename: str) -> Any:
+        """Load the YAML specification from a file and convert it according to the schema.
+
+        Args:
+            filename: The name of the YAML file to load.
+
+        Returns:
+            The converted runtime value tree with attribute access.
         """
 
         self.filename = filename
-        self.path = path
-        self.accessed_keys = set()
+        with open(filename, "r") as stream:
+            yaml_spec = yaml.safe_load(stream)
+
+        return self.parse(yaml_spec, f"{filename}:")
+
+
+    def parse(self, data: Any, root_path: str = "") -> Any:
+        """Convert a raw YAML value according to the schema.
         
-        if isinstance(spec, str):
-            self.filename = spec
+        Args:
+            data: The raw YAML value to convert.
+            root_path: The path to the root of the YAML structure, used for error messages.
+
+        Returns:
+            The converted runtime value according to the schema.
+        """
+
+        return self.schema.convert(data, parents=[], path=root_path)
+
+
+palette_schema = ScalarSchema(
+    yaml_type=[dict[int | str, int | None], list[int | str]],
+    value_type=Palette.Palette,
+    converter=lambda value: Palette.Palette(value))
+
+bool_schema = ScalarSchema(
+    yaml_type=[bool, str],
+    value_type=bool,
+    converter=lambda value: bool(value) if isinstance(value, bool) else value.lower() in ["true", "yes", "1"])
+
+int_schema = ScalarSchema(
+    yaml_type=[int, str],
+    value_type=int,
+    converter=lambda value: value if isinstance(value, int) else int(value, 0))
+
+float_schema = ScalarSchema(
+    yaml_type=[float, str],
+    value_type=float,
+    converter=lambda value: float(value))
+
+str_schema = ScalarSchema(
+    yaml_type=[str, int, float],
+    value_type=str,
+    converter=lambda value: str(value))
+
+def enum_schema(enum_type: type):
+    """Create a ScalarSchema for an enum type.
+
+    Args:
+        enum_type: The enum type to create the schema for.
+        required: Whether the value is required.
+        default_value: The default value for the enum.
+    Returns:
+        A ScalarSchema for the enum type.
+    """
+
+    if not issubclass(enum_type, enum.Enum):
+        raise TypeError(f"Expected enum type, got {type(enum_type).__name__}")
+    
+    def converter(value: Any) -> Any:
+        if isinstance(value, str):
             try:
-                with open(spec, "r") as stream:
-                        self.yaml_spec = yaml.safe_load(stream)
-            except Exception as ex:
-                self._raise_error(ex)
-        elif spec is None:
-            self.yaml_spec = {}
-        else:
-            self.yaml_spec = spec
-            for key in self.yaml_spec.keys():
-                if not isinstance(key, str):
-                    self._raise_type_error(str, key, suffix="key")
-    
-    def unknown_keys(self) -> list[str]:
-        """Return list of unknown keys in the YAML specification.
-        
-        Returns:
-            List of keys that have not been accessed.
-        """
-
-        return [key for key in self.yaml_spec.keys() if key not in self.accessed_keys]
-    
-    def get_type(self, key: str) -> type | None:
-        """Get the type of a value in the YAML specification.
-
-        Args:
-            key: The key to get the type for.
-
-        Returns:
-            The type of the value, or None if the key does not exist.
-        """
-
-        if key in self.yaml_spec:
-            return type(self.yaml_spec[key])
-        else:
-            return None     
-
-    def get(self, key: str, default_value: Any=None, required: bool = False, value_type: type_spec|None = None) -> Any:
-        """Get a value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-            value_type: The expected type of the value.
-
-        Returns:
-            The value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not of the expected type.
-        """
-
-        self.accessed_keys.add(key)
-        if key in self.yaml_spec:
-            if value_type is not None and not self._check_type(self.yaml_spec[key], value_type):
-                self._raise_type_error(value_type, key)
-            return self.yaml_spec[key]
-        else:
-            if required:
-                self._raise_key_error(key)
-            if default_value is not None and value_type is not None and not self._check_type(default_value, value_type):
-                self._raise_type_error(value_type, key, suffix="default value")
-            return default_value
-    
-    def get_bool(self, key: str, default_value: bool = False, required: bool = False) -> bool:
-        """Get a boolean value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-        
-        Returns:
-            The boolean value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a boolean.
-        """
-
-        return self.get(key, default_value=default_value, required=required, value_type=bool)
-    
-    def get_int(self, key: str, default_value: int = 0, required: bool = False) -> int:
-        """Get an integer value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-        
-        Returns:
-            The integer value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not an integer.
-        """
-
-        return self.get(key, default_value=default_value, required=required, value_type=int)
-    
-    def get_optional_int(self, key: str, default_value: int | None = None) -> int | None:
-        """Get an optional integer value from the YAML specification.
-
-        Args:
-            key: The key to get.
-
-        Returns:
-            The integer value, or None if not found.
-
-        Raises:
-            TypeError: If the value is not an integer.
-        """
-
-        return self.get(key, default_value=default_value, value_type=[int, type(None)])
-
-    def get_str(self, key: str, default_value: str = "", required: bool = False) -> str:
-        """Get a string value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-        
-        Returns:
-            The string value.
-        
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a string.
-        """
-
-        return self.get(key, default_value=default_value, required=required, value_type=str)
-    
-    def get_optional_str(self, key: str, default_value: str | None = None) -> str | None:
-        """Get an optional string value from the YAML specification.
-
-        Args:
-            key: The key to get.
-        
-        Returns:
-            The string value, or None if not found.
-
-        Raises:
-            TypeError: If the value is not a string.
-        """
-
-        return self.get(key, default_value=default_value, value_type=[str, type(None)])
-
-    def get_float(self, key: str, default_value: float = 0.0, required: bool = False) -> float:
-        """Get a float value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-        
-        Returns:
-            The float value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a float.
-        """
-
-        return self.get(key, default_value=default_value, required=required, value_type=[float, int])
-    
-    def get_list(self, key: str, item_type: type_spec | None = None, default_value: list|None = None, required: bool = False) -> list:
-        """Get a list value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            item_type: The expected type of the list elements.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-
-        Returns:
-            The list value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a list or if any element is not of the expected type.
-        """
-
-        if default_value is None:
-            default_value = []
-        value = self.get(key, default_value=default_value, required=required, value_type=list)
-        if item_type is not None:
-            for index, item in enumerate(value):
-                if not self._check_type(item, item_type):
-                    self._raise_type_error(item_type, [key, index], suffix="element")
-        return value
-        
-    def get_dict(self, key: str, key_type: type_spec | None = None, value_type: type_spec | None = None, default_value: dict|None = None, required: bool = False) -> dict:
-        """Get a dictionary value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            key_type: The expected type of the dictionary keys.
-            value_type: The expected type of the dictionary values.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-        
-        Returns:
-            The dictionary value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a dictionary or if any key or value is not of the expected type.
-        """
-
-        if default_value is None:
-            default_value = {}
-        value = self.get(key, default_value=default_value, required=required, value_type=dict)
-        for item_key, item_value in value.items():
-            if key_type is not None:
-                if not self._check_type(item_key, key_type):
-                    self._raise_type_error(key_type, [key, item_key], suffix="key")
-            if value_type is not None:
-                if not self._check_type(item_value, value_type):
-                    self._raise_type_error(value_type, [key, item_key], suffix="value")
-        return value
-    
-    def get_spec(self, key: str) -> 'YAMLSpec':
-        """Get a nested YAML specification.
-
-        Args:
-            key: The key to get.
-
-        Returns:
-            The nested YAML specification.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a dictionary or keys are not strings.
-        """
-
-        value = self.get_dict(key, required=True, key_type=str)
-        return self._create_sub_spec(value, key)
-    
-    def get_spec_list(self, key: str, allow_single: bool = False) -> list['YAMLSpec']:
-        """Get a list of nested YAML specifications.
-
-        Args:
-            key: The key to get.
-            allow_single: Whether to allow a single specification instead of a list.
-
-        Returns:
-            The list of nested YAML specifications.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a a valid specification or list of specifications.
-        """
-
-        value_type = [list, dict] if allow_single else list
-        value = self.get(key, required=True, value_type=value_type)
-        if isinstance(value, list):
-            specs = []
-            for index, item in enumerate(value):
-                if not isinstance(item, dict):
-                    self._raise_type_error(dict, [key, index], suffix="element")
-                specs.append(self._create_sub_spec(item, [key, index]))
-            return specs
-        else:
-            return [self._create_sub_spec(value, key)]
-        
-
-
-    def get_palette(self, key: str, default_value: Palette.Palette|None = None, required: bool = False) -> Palette.Palette:
-        """Get a Palette value from the YAML specification.
-
-        Args:
-            key: The key to get.
-            default_value: The default value to return if the key is not found.
-            required: Whether the key is required.
-        
-        Returns:
-            The Palette value.
-
-        Raises:
-            KeyError: If the key is required but not found.
-            TypeError: If the value is not a valid Palette specification.
-        """
-
-        value = self.get(key, required=required, default_value=default_value)
-        if isinstance(value, Palette.Palette):
+                return enum_type[value]
+            except KeyError:
+                raise ValueError(f"Invalid value '{value}' for enum {enum_type.__name__}")
+        elif isinstance(value, enum_type):
             return value
-        elif isinstance(value, str):
-            try: 
-                return Palette.get_palette(value)
-            except Exception as ex:
-                self._raise_error(ex, key)
-        elif isinstance(value, list):
-            colors = []
-            for index, color in enumerate(value):
-                try:
-                    colors.append(Palette.get_colors(color))
-                except Exception:
-                    self._raise_error(f"expected color or list of colors", [key, index])
-            return Palette.Palette(colors)
-        elif isinstance(value, dict):
-            color_map = {}
-            for color, index in value.items():
-                if not self._check_type(index, [int, type(None)]):
-                    self._raise_type_error([int, type(None)], [key, color], suffix="value")
-                
-                try:
-                    colors = Palette.get_colors(color)
-                except Exception:
-                    self._raise_error(f"expected color or list of colors", key, exception_type=TypeError)       
-                
-                for color in colors:        
-                        color_map[color] = index
-            return Palette.Palette(color_map)
         else:
-            self._raise_type_error([list, dict], key)
+            raise TypeError(f"Expected str or {enum_type.__name__}, got {type(value).__name__}")
 
-
-    def _check_type(self, value: Any, expected_type: type | list[type]) -> bool:
-        """Check that a value is of the expected type.
-        
-        Args:
-            value: The value to check.
-            expected_type: The expected type of the value.
-
-        Returns:
-            True if the value is of the expected type, False otherwise.
-        """
-        if isinstance(expected_type, list):
-            return any(isinstance(value, t) for t in expected_type)
-        else:
-            return isinstance(value, expected_type)
-
-    def _append_path(self, sub_path: str|int|list[str|int]|None = None) -> str:
-        """Append a key to the current path.
-
-        Args:
-            key: The key to append.
-
-        Returns:
-            The new path.
-        """
-
-        if sub_path is None:
-            return self.path
-        
-        parts = []
-        if self.path != "":
-            parts.append(self.path)
-        if isinstance(sub_path, list):
-            parts.extend([str(part) for part in sub_path])
-        else:
-            parts.append(str(sub_path))
-        return ".".join(parts)
-        
-    def _create_sub_spec(self, spec: dict, sub_path: str|int|list[str|int]|None = None) -> 'YAMLSpec':
-        """Create a sub-specification.
-
-        Args:
-            spec: The specification data for the sub-specification.
-            sub_path: The sub-path within the YAML specification.
-        
-        Returns:
-            The sub-specification.  
-        """
-        return YAMLSpec(spec, path=self._append_path(sub_path), filename=self.filename)
-    
-    def _raise_error(self, message: str | Exception, sub_path: str|int|list[str|int]|None = None, exception_type: type = RuntimeError) -> NoReturn:
-        """Raise a runtime error with the current path.
-
-        Args:
-            message: The error message.
-        """
-
-        message_text = self.filename
-        message_path = self._append_path(sub_path)
-        if message_path != "":
-            if message_text != "":
-                message_text += ":"
-            message_text += message_path
-        if message_text != "":
-            message_text += ": "
-        message_text += str(message)
-
-        if isinstance(message, Exception):
-            if exception_type is RuntimeError:
-                exception_type = type(message)
-            raise exception_type(message_text) from message
-        
-        raise exception_type(message_text)
-    
-    def _raise_type_error(self, expected_type: type | list[type], sub_path: str|int|list[str|int]|None = None, suffix: str = "") -> NoReturn:
-        """Raise a runtime error for a type mismatch.
-
-        Args:
-            expected_type: The expected type.
-            sub_path: The sub-path within the YAML specification.
-        """
-
-        message = "expected "
-        if isinstance(expected_type, list):
-            type_names = [t.__name__ for t in expected_type]
-            if len(type_names) == 1:
-                message += type_names[0]
-            elif len(type_names) == 2:
-                message += f"{type_names[0]} or {type_names[1]}"
-            else:
-                message += ", ".join(type_names[:-1]) + f", or {type_names[-1]}"
-        else:
-            message += expected_type.__name__
-
-        if suffix != "":
-            message += " " + suffix
-
-        self._raise_error(message, sub_path, exception_type=TypeError)
- 
-    def _raise_key_error(self, sub_path: str|int|list[str|int]|None = None) -> NoReturn:
-        """Raise a key error for a missing key.
-
-        Args:
-            sub_path: The sub-path within the YAML specification.
-        """
-
-        self._raise_error("missing required directive", sub_path, exception_type=KeyError)
+    return ScalarSchema(
+        yaml_type=[str, enum_type],
+        value_type=enum_type,
+        converter=converter)
