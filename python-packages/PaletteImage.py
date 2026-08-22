@@ -122,6 +122,11 @@ class LogicalImage:
         self.width = 0
         self.height = 0
 
+    @property
+    def filename(self) -> str|None:
+        """Return filename of image, if any."""
+        raise NotImplementedError()
+
     def get(self, x: int, y: int) -> int | None:
         """Get palette index of logical pixel at (x, y).
 
@@ -223,7 +228,7 @@ class PaletteImage(LogicalImage):
         """
 
         self.palette = copy(palette)
-        self.filename = filename
+        self._filename = filename
         self.pixel_size = pixel_size
 
         given = 0
@@ -254,6 +259,11 @@ class PaletteImage(LogicalImage):
             raise FilePositionException(f"image dimensions ({self.image.width}x{self.image.height}) are not multiple of pixel size {self.pixel_size}", file=self.filename)
         self.width = self.image.width // self.pixel_size.x
         self.height = self.image.height // self.pixel_size.y
+
+    @property
+    def filename(self) -> str|None:
+        """Return filename of image, if any."""
+        return self._filename
 
     def get(self, x: int, y: int) -> int | None:
         """Get palette index of logical pixel at (x, y).
@@ -351,6 +361,11 @@ class Window(LogicalImage):
 
         if self.x_offset < 0 or self.x_offset + self.width > self.image.width or self.y_offset < 0 or self.y_offset + self.height > self.image.height:
             raise ValueError("window larger than image")
+
+    @property
+    def filename(self) -> str|None:
+        """Return filename of image, if any."""
+        return self.image.filename
 
     def get(self, x: int, y: int) -> int | None:
         """Get palette index of logical pixel at (x, y) in window.

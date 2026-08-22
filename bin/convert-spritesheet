@@ -70,7 +70,7 @@ schema = YAMLSpec.DictSchema("SpriteSheetSpec",
         "sheets": YAMLSpec.ArraySchema(
             YAMLSpec.DictSchema("SheetSpec", 
                 {
-                    "max_layers": YAMLSpec.int_schema,
+                    "max_layers": YAMLSpec.DictEntry(YAMLSpec.int_schema, default_value=1),
                     "palette": palette_entry,
                     "image": YAMLSpec.DictEntry(
                         YAMLSpec.DictSchema("ImageSpec", 
@@ -144,7 +144,6 @@ class ConvertSpriteSheet(Script.Script):
     
     def execute_sub(self):
         spec = YAMLSpec.YAMLSpec(schema).load(self.find_file(self.args.specs))
-        print(spec)
 
         for sheet in spec.sheets:
             self.convert_sheet(sheet, spec)
@@ -153,10 +152,10 @@ class ConvertSpriteSheet(Script.Script):
         sprite_images = self.load_sprites(sheet.image, sheet.palette)
         frames = []
 
-        for sprite_image in sprite_images:
+        for index, sprite_image in enumerate(sprite_images):
             frames.append(Frame(sprite_image))
             if len(frames[-1]) > sheet.max_layers:
-                raise RuntimeError(f"sprite in {sprite_image.filename} has {len(frames[-1])} layers, exceeds max of {sheet.max_layers}")
+                raise RuntimeError(f"sprite {index} in {sprite_image.filename} has {len(frames[-1])} layers, exceeds max of {sheet.max_layers}")
 
         layers = max(len(frame) for frame in frames)
         for frame in frames:

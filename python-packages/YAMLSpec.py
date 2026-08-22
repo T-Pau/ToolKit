@@ -154,7 +154,7 @@ class ScalarSchema(Schema):
             try:
                 value = self.converter(value)
             except Exception as e:
-                raise ValueError(f"{path}: Conversion error: {e}")
+                raise ValueError(f"{path}: Conversion error: {e}") from e
         if self.validator is not None:
             if error := self.validator(value):
                 raise ValueError(error)
